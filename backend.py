@@ -95,7 +95,10 @@ create table project_requested_profiles (
 )
 """.split('\n\n')
     for sql in sqls:
-        conn.execute(sql)
+        try:
+            conn.execute(sql)
+        except sqlalchemy.exc.OperationalError as e:
+            print(e.args)
 
 
 class Users(Resource):
