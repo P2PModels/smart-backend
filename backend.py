@@ -4,6 +4,8 @@
 Keep the data of users and projects, and present a REST api to talk to the world.
 """
 
+# We will model our api on https://docs.dhis2.org/master/en/developer/html/webapi.html
+
 # The structure that we want to follow is:
 #
 # user
@@ -35,14 +37,42 @@ from flask_restful import Resource, Api
 import sqlalchemy
 import json
 
-db = sqlalchemy.create_engine('sqlite:///smart.db')
-app = Flask(__name__)
-api = Api(app)
+app = None
+db = None
+
+
+class Users(Resource):
+    def get(self):
+        conn = db.connect()
+        query = conn.execute('select * from users')
+        return {'users': [x for x in query.cursor.fetchall()]}
+
+
+class Projects(Resource):
+    def get(self):
+        conn = db.connect()
+        query = conn.execute('select * from projects')
+        return {'projects': [x for x in query.cursor.fetchall()]}
+
+
+def get_user(uid):
+    "Return all the fields of a given user"
+    conn = db.connect()
+    query = conn.execute('select * from users where id=%d' % uid)
+    return query.cursor.fetchall()
+
+
+def initialize(db_name='smart.db'):
+    global app, db
+    db = sqlalchemy.create_engine('sqlite:///%s' % db_name)
+    app = Flask(__name__)
+    api = Api(app)
+    api.add_resource(Users, '/users')
+    api.add_resource(Projects, '/projects')
 
 
 def create_db():
     "Create an empty database with the appropriate tables"
-    conn = db.connect()
     sqls = """
 create table projects (
     id int primary key not null,
@@ -94,31 +124,36 @@ create table project_requested_profiles (
     id_user int
 )
 """.split('\n\n')
+    conn = db.connect()
     for sql in sqls:
         try:
             conn.execute(sql)
         except sqlalchemy.exc.OperationalError as e:
-            print(e.args)
+            print(e.args[0])
 
 
-class Users(Resource):
-    def get(self):
-        conn = db.connect()
-        query = conn.execute('select * from users')
-        return {'users': [x for x in query.cursor.fetchall()]}
-
-
-class Projects(Resource):
-    def get(self):
-        conn = db.connect()
-        query = conn.execute('select * from projects')
-        return {'projects': [x for x in query.cursor.fetchall()]}
-
-
-api.add_resource(Users, '/users')
-api.add_resource(Projects, '/projects')
+def drop_db():
+    sqls = """
+drop table projects
+drop table users
+drop table profiles
+drop table user_profiles
+drop table user_created_projects
+drop table user_joined_projects
+drop table project_participants
+drop table project_requested_profiles
+""".splitlines()
+    conn = db.connect()
+    for sql in sqls:
+        try:
+            conn.execute(sql)
+        except sqlalchemy.exc.OperationalError as e:
+            print(e.args[0])
 
 
 
 if __name__ == '__main__':
+    initialize()
+    #create_db()
+    #drop_db()
     app.run()
