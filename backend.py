@@ -58,11 +58,14 @@ class Projects(Resource):
 def get_user(uid):
     "Return all the fields of a given user"
     conn = db.connect()
-    query = conn.execute('select * from users where id=%d' % uid)
-    return query.cursor.fetchall()
+    q = lambda x: conn.execute(x).cursor.fetchall()
+    user = q('select * from users where id=%d' % uid)[0]
+    profiles_ids = q('select id_profile from user_profiles where id_user=%d' % uid)[0]
+    profile_names = {x[0]: x[1] for x in q('select * from profiles')}
 
 
 def initialize(db_name='smart.db'):
+    "Initialize the database and the flask app"
     global app, db
     db = sqlalchemy.create_engine('sqlite:///%s' % db_name)
     app = Flask(__name__)
@@ -133,6 +136,7 @@ create table project_requested_profiles (
 
 
 def drop_db():
+    "Drop all tables"
     sqls = """
 drop table projects
 drop table users
