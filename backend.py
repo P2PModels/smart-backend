@@ -25,7 +25,6 @@ Keep the data of users and projects, and present a REST api to talk to the world
 # project
 #   id: int
 #   creator: int
-#   participants: list of ints
 #   title: str
 #   subtitle: str
 #   description: str
@@ -33,39 +32,73 @@ Keep the data of users and projects, and present a REST api to talk to the world
 #   img_bg: str
 #   img1: str
 #   img2: str
+#   participants: list of ints
 #   requested_profiles: list of str
 
 
 from flask import Flask, request
 from flask_restful import Resource, Api
 import sqlalchemy
-import json
 
-app = None
+app = None  # call initialize() to fill these up
 db = None
 
 
 class Users(Resource):
-    def get(self):
-        conn = db.connect()
-        query = conn.execute('select * from users')
-        return {'users': [x for x in query.cursor.fetchall()]}
+    def get(self, user_id=None):
+        if not user_id:
+            return get(db.connect(), 'id,name,password,mail,web', 'users')
+        else:
+            return get_user(user_id)
 
 
 class Projects(Resource):
-    def get(self):
-        conn = db.connect()
-        query = conn.execute('select * from projects')
-        return {'projects': [x for x in query.cursor.fetchall()]}
+    def get(self, project_id=None):
+        if not project_id:
+            return get(db.connect(),
+                'id,creator,title,subtitle,description,url,img_bg,img1,img2',
+                'projects')
+        else:
+            return get_project(project_id)
+
+
+def get(conn, what, where):
+    "Return result of the query 'select what from where' as a dict"
+    res = conn.execute('select %s from %s' % (what, where)).fetchall()
+    return [dict(zip(what.split(','), x)) for x in res]
+
+
+def get0(conn, what, where):
+    "Return a list of the selected elements from get()"
+    return [x[what] for x in get(conn, what, where)]
 
 
 def get_user(uid):
     "Return all the fields of a given user"
     conn = db.connect()
-    q = lambda x: conn.execute(x).cursor.fetchall()
-    user = q('select * from users where id=%d' % uid)[0]
-    profiles_ids = q('select id_profile from user_profiles where id_user=%d' % uid)[0]
-    profile_names = {x[0]: x[1] for x in q('select * from profiles')}
+    user = get(conn, 'id,name,password,mail,web', 'users where id=%s' % uid)[0]
+    user['profiles'] = get0(conn, 'profile_name',
+        'profiles where id in '
+            '(select id_profile from user_profiles where id_user=%s)' % uid)
+    user['projects_created'] = (
+        get0(conn, 'id_project', 'user_created_projects where id_user=%s' % uid))
+    user['projects_joined'] = get0(conn, 'id_project',
+        'user_joined_projects where id_user=%s' % uid)
+    return user
+
+
+def get_project(pid):
+    "Return all the fields of a given project"
+    conn = db.connect()
+    project = get(conn,
+        'id,creator,title,subtitle,description,url,img_bg,img1,img2',
+        'projects where id=%s' % pid)[0]
+    project['participants'] = get0(conn, 'id_user',
+        'user_joined_projects where id_project=%s' % pid)
+    project['requested_profiles'] = get0(conn, 'profile_name',
+        'profiles where id in '
+            '(select id_profile from project_requested_profiles where id_project=%s)' % pid)
+    return project
 
 
 def initialize(db_name='smart.db'):
@@ -74,85 +107,14 @@ def initialize(db_name='smart.db'):
     db = sqlalchemy.create_engine('sqlite:///%s' % db_name)
     app = Flask(__name__)
     api = Api(app)
-    api.add_resource(Users, '/users')
-    api.add_resource(Projects, '/projects')
+    api.add_resource(Users, '/users', '/users/<string:user_id>')
+    api.add_resource(Projects, '/projects', '/projects/<string:project_id>')
 
 
 def create_db():
     "Create an empty database with the appropriate tables"
-    sqls = """
-create table projects (
-    id int primary key not null,
-    creator int not null,
-    title text not null,
-    subtitle text,
-    description text,
-    url text,
-    imb_bg text,
-    img1 text,
-    img2 text
-)
-
-create table users (
-    id int primary key not null,
-    name text not null,
-    password text not null,
-    mail text,
-    web text
-)
-
-create table profiles (
-    id int primary key,
-    profile_name text
-)
-
-create table user_profiles (
-    id_user int,
-    id_profile int
-)
-
-create table user_created_projects (
-    id_user int,
-    id_project int
-)
-
-create table user_joined_projects (
-    id_user int,
-    id_project int
-)
-
-create table project_participants (
-    id_project int,
-    id_user int
-)
-
-create table project_requested_profiles (
-    id_project int,
-    id_user int
-)
-""".split('\n\n')
     conn = db.connect()
-    for sql in sqls:
-        try:
-            conn.execute(sql)
-        except sqlalchemy.exc.OperationalError as e:
-            print(e.args[0])
-
-
-def drop_db():
-    "Drop all tables"
-    sqls = """
-drop table projects
-drop table users
-drop table profiles
-drop table user_profiles
-drop table user_created_projects
-drop table user_joined_projects
-drop table project_participants
-drop table project_requested_profiles
-""".splitlines()
-    conn = db.connect()
-    for sql in sqls:
+    for sql in open('create_tables.sql').read().split('\n\n'):
         try:
             conn.execute(sql)
         except sqlalchemy.exc.OperationalError as e:
@@ -162,6 +124,4 @@ drop table project_requested_profiles
 
 if __name__ == '__main__':
     initialize()
-    #create_db()
-    #drop_db()
     app.run()
