@@ -4,6 +4,10 @@
 Keep the data of users and projects, and present a REST api to talk to the world.
 """
 
+# TODO:
+#   * Use bearer authentication.
+#   * Make all the POST and PUT calls work.
+
 # We will model our api on https://docs.dhis2.org/master/en/developer/html/webapi.html
 
 # The structure that we want to follow is:
