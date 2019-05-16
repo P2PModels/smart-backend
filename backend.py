@@ -11,6 +11,14 @@ Keep the data of users and projects, and present a REST api to talk to the world
 
 # We will model our api on https://docs.dhis2.org/master/en/developer/html/webapi.html
 
+# REST call examples:
+# GET 	/device-management/devices : Get all devices
+# POST 	/device-management/devices : Create a new device
+#
+# GET 	/device-management/devices/{id} : Get the device information identified by "id"
+# PUT 	/device-management/devices/{id} : Update the device information identified by "id"
+# DELETE	/device-management/devices/{id} : Delete device by "id"
+
 # The structure that we want to follow is:
 #
 # user
@@ -52,6 +60,22 @@ class Users(Resource):
         else:
             return get_user(user_id)
 
+    def put(self, user_id=None):
+        if not user_id:
+            data = request.form['users']
+            conn = db.connect()
+            conn.execute('insert into users (%s) values (%s)' % (data.keys(), data.values()))
+            return {'message': 'ok'}
+        else:
+            conn = db.connect()
+            if len(get(conn, '*', 'users where id=%s' % user_id)) > 0:
+                return {'message': 'error: user %s already exists.' % user_id}
+            user = request.form['users'][0]
+            assert 'id' not in user
+            user['id'] = user_id
+            conn.execute('insert into users (%s) values (%s)' % (data.keys(), data.values()))
+            return {'message': 'ok'}
+
 
 class Projects(Resource):
     def get(self, project_id=None):
@@ -77,7 +101,10 @@ def get0(conn, what, where):
 def get_user(uid):
     "Return all the fields of a given user"
     conn = db.connect()
-    user = get(conn, 'id,name,password,mail,web', 'users where id=%s' % uid)[0]
+    users = get(conn, 'id,name,password,mail,web', 'users where id=%s' % uid)
+    if len(users) != 1:
+        return {'message': 'error: number of matching users is %d' % len(users)}
+    user = users[0]
     user['profiles'] = get0(conn, 'profile_name',
         'profiles where id in '
             '(select id_profile from user_profiles where id_user=%s)' % uid)
