@@ -85,6 +85,21 @@ class Projects(Resource):
         else:
             return get_project(project_id)
 
+    def post(self):
+        conn = db.connect()
+        for project in request.json['projects']:
+            conn.execute('insert into projects %r values %r' %
+                (tuple(project.keys()), tuple(project.values())))
+        return {'message': 'ok'}, 201
+
+    def put(self, project_id):
+        conn = db.connect()
+        for project in request.json['projects']:
+            values = ','.join('%r=%r' % k_v for k_v in project.items())
+            conn.execute('update projects set %s where id=%s' %
+                (values, project_id))
+        return {'message': 'ok'}
+
 
 def get(conn, what, where):
     "Return result of the query 'select what from where' as a dict"
