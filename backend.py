@@ -12,7 +12,7 @@ to the world.
 #     projects, participants and so on (projects_created, projects_joined,
 #     participants and requested_profiles).
 
-# We will model our api on
+# We will take ideas for our api from
 # https://docs.dhis2.org/master/en/developer/html/webapi.html
 
 # REST call examples:
@@ -59,28 +59,29 @@ class Users(Resource):
     def get(self, user_id=None):
         if not user_id:
             users = get(db.connect(), 'id,name,password,mail,web', 'users')
-            return [nonempty(x) for x in users]
+            return [strip(x) for x in users]
         else:
             return get_user(user_id)
 
     def post(self):
         conn = db.connect()
-        for user in request.json['users']:
-            conn.execute('insert into users %r values %r' %
-                (tuple(user.keys()), tuple(user.values())))
+        conn.execute('insert into users %r values %r' %
+            tuple(zip(*request.json.items())))
         return {'message': 'ok'}
 
     def put(self, user_id):
         conn = db.connect()
-        for user in request.json['users']:
-            values = ','.join('%r=%r' % k_v for k_v in user.items())
-            conn.execute('update users set %s where id=%d' % (values, user_id))
-        return {'message': 'ok'}
+        kvs = ','.join('%r=%r' % k_v for k_v in request.json.items())
+        res = conn.execute('update users set %s where id=%d' % (kvs, user_id))
+        if res.rowcount == 1:
+            return {'message': 'ok'}
+        else:
+            return {'message': 'error: unknown user id %d' % user_id}, 409
 
     def delete(self, user_id):
         conn = db.connect()
-        result = conn.execute('delete from users where id=%d' % user_id)
-        if result.rowcount == 1:
+        res = conn.execute('delete from users where id=%d' % user_id)
+        if res.rowcount == 1:
             return {'message': 'ok'}
         else:
             return {'message': 'error: unknown user id %d' % user_id}, 409
@@ -89,31 +90,33 @@ class Users(Resource):
 class Projects(Resource):
     def get(self, project_id=None):
         if not project_id:
-            return get(db.connect(),
+            projects = get(db.connect(),
                 'id,creator,title,subtitle,description,url,img_bg,img1,img2',
                 'projects')
+            return [strip(x) for x in projects]
         else:
             return get_project(project_id)
 
     def post(self):
         conn = db.connect()
-        for project in request.json['projects']:
-            conn.execute('insert into projects %r values %r' %
-                (tuple(project.keys()), tuple(project.values())))
+        conn.execute('insert into projects %r values %r' %
+            tuple(zip(*request.json.items())))
         return {'message': 'ok'}, 201
 
     def put(self, project_id):
         conn = db.connect()
-        for project in request.json['projects']:
-            values = ','.join('%r=%r' % k_v for k_v in project.items())
-            conn.execute('update projects set %s where id=%d' %
-                (values, project_id))
-        return {'message': 'ok'}
+        kvs = ','.join('%r=%r' % k_v for k_v in request.json.items())
+        res = conn.execute('update projects set %s where id=%d' %
+            (kvs, project_id))
+        if res.rowcount == 1:
+            return {'message': 'ok'}
+        else:
+            return {'message': 'error: unknown project id %d' % project_id}, 409
 
     def delete(self, project_id):
         conn = db.connect()
-        result = conn.execute('delete from projects where id=%d' % project_id)
-        if result.rowcount == 1:
+        res = conn.execute('delete from projects where id=%d' % project_id)
+        if res.rowcount == 1:
             return {'message': 'ok'}
         else:
             return {'message': 'error: unknown project id %d' % project_id}, 409
@@ -150,16 +153,7 @@ def get_user(uid):
     user['projects_joined'] = get0(conn, 'id_project',
         'user_joined_projects where id_user=%d' % uid)
 
-    return nonempty(user)
-
-
-def nonempty(d):
-    "Return dictionary without the keys that have empty values"
-    d_nonempty = {}
-    for k, v in d.items():
-        if v:
-            d_nonempty[k] = d[k]
-    return d_nonempty
+    return strip(user)
 
 
 def get_project(pid):
@@ -182,7 +176,16 @@ def get_project(pid):
         '  (select id_profile from project_requested_profiles '
         '   where id_project=%d)' % pid)
 
-    return project
+    return strip(project)
+
+
+def strip(d):
+    "Return dictionary without the keys that have empty values"
+    d_stripped = {}
+    for k, v in d.items():
+        if v:
+            d_stripped[k] = d[k]
+    return d_stripped
 
 
 def initialize(db_name='smart.db'):
@@ -195,6 +198,10 @@ def initialize(db_name='smart.db'):
             'status': 400,
             'message': 'bad_request',
             'description': 'Our database did not like that.'},
+        'OperationalError': {
+            'status': 400,
+            'message': 'bad_field',
+            'description': 'Seems you used a nonexisting field.'},
         'KeyError': {
             'status': 400,
             'message': 'missing_field',
