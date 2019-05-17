@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 """
-Keep the data of users and projects, and present a REST api to talk to the world.
+Keep the data of users and projects, and present a REST api to talk
+to the world.
 """
 
 # TODO:
@@ -12,12 +13,11 @@ Keep the data of users and projects, and present a REST api to talk to the world
 # We will model our api on https://docs.dhis2.org/master/en/developer/html/webapi.html
 
 # REST call examples:
-# GET 	/device-management/devices : Get all devices
-# POST 	/device-management/devices : Create a new device
-#
-# GET 	/device-management/devices/{id} : Get the device information identified by "id"
-# PUT 	/device-management/devices/{id} : Update the device information identified by "id"
-# DELETE	/device-management/devices/{id} : Delete device by "id"
+#   GET    /users       Get all users
+#   GET    /users/{id}  Get the user information identified by "id"
+#   POST   /users       Create a new user
+#   PUT    /users/{id}  Update the user information identified by "id"
+#   DELETE /users/{id}  Delete user by "id"
 
 # The structure that we want to follow is:
 #
