@@ -164,4 +164,4 @@ def create_db():
 
 if __name__ == '__main__':
     initialize()
-    app.run()
+    app.run(debug=True)
