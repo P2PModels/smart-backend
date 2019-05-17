@@ -56,22 +56,23 @@ db = None
 class Users(Resource):
     def get(self, user_id=None):
         if not user_id:
-            return get(db.connect(), 'id,name,password,mail,web', 'users')
+            users = get(db.connect(), 'id,name,password,mail,web', 'users')
+            return [nonempty(x) for x in users]
         else:
             return get_user(user_id)
 
     def post(self):
         conn = db.connect()
         for user in request.json['users']:
-            conn.execute('insert into users (%s) values (%s)' %
-                         (','.join(user.keys()), ','.join(map(str, user.values()))))
+            conn.execute('insert into users %r values %r' %
+                (tuple(user.keys()), tuple(user.values())))
         return {'message': 'ok'}
 
     def put(self, user_id):
         conn = db.connect()
         for user in request.json['users']:
-            updates = ','.join('%r = %r' % k_v for k_v in user.items())
-            conn.execute('update users set %s where id=%s' % (updates, user_id))
+            values = ','.join('%r=%r' % k_v for k_v in user.items())
+            conn.execute('update users set %s where id=%s' % (values, user_id))
         return {'message': 'ok'}
 
 
@@ -99,18 +100,33 @@ def get0(conn, what, where):
 def get_user(uid):
     "Return all the fields of a given user"
     conn = db.connect()
+
     users = get(conn, 'id,name,password,mail,web', 'users where id=%s' % uid)
-    if len(users) != 1:
-        return {'message': 'error: number of matching users is %d' % len(users)}
+    if len(users) == 0:
+        return {'message': 'error: unknown user id %s' % uid}, 409
+
     user = users[0]
+
     user['profiles'] = get0(conn, 'profile_name',
         'profiles where id in '
             '(select id_profile from user_profiles where id_user=%s)' % uid)
-    user['projects_created'] = (
-        get0(conn, 'id_project', 'user_created_projects where id_user=%s' % uid))
+
+    user['projects_created'] = get0(conn, 'id_project',
+        'user_created_projects where id_user=%s' % uid)
+
     user['projects_joined'] = get0(conn, 'id_project',
         'user_joined_projects where id_user=%s' % uid)
-    return user
+
+    return nonempty(user)
+
+
+def nonempty(d):
+    "Return dictionary without the keys that have empty values"
+    d_nonempty = {}
+    for k, v in d.items():
+        if v:
+            d_nonempty[k] = d[k]
+    return d_nonempty
 
 
 def get_project(pid):
@@ -123,7 +139,8 @@ def get_project(pid):
         'user_joined_projects where id_project=%s' % pid)
     project['requested_profiles'] = get0(conn, 'profile_name',
         'profiles where id in '
-            '(select id_profile from project_requested_profiles where id_project=%s)' % pid)
+        '  (select id_profile from project_requested_profiles '
+        '   where id_project=%s)' % pid)
     return project
 
 
@@ -133,12 +150,12 @@ def initialize(db_name='smart.db'):
     db = sqlalchemy.create_engine('sqlite:///%s' % db_name)
     app = Flask(__name__)
     api = Api(app,
-              errors={
-                  'Exception': {
-                      'status': 400,
-                      'message': 'bad_request',
-                      'some_description': 'Something wrong with request'
-                  }})
+        errors={
+            'IntegrityError': {
+                'status': 400,
+                'message': 'bad_request',
+                'description': 'Our database did not like that'
+            }})
     api.add_resource(Users, '/users', '/users/<string:user_id>')
     api.add_resource(Projects, '/projects', '/projects/<string:project_id>')
 
@@ -156,4 +173,4 @@ def create_db():
 
 if __name__ == '__main__':
     initialize()
-    app.run(debug=True)
+    app.run()
