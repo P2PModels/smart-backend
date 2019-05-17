@@ -8,9 +8,12 @@ to the world.
 # TODO:
 #   * Use bearer authentication (use python3-flask-httpauth MultiAuth, see
 #     https://flask-httpauth.readthedocs.io/en/latest/).
-#   * Make all the POST and PUT calls work.
+#   * Make the POST, PUT and DELETE calls work properly linking list of
+#     projects, participants and so on (projects_created, projects_joined,
+#     participants and requested_profiles).
 
-# We will model our api on https://docs.dhis2.org/master/en/developer/html/webapi.html
+# We will model our api on
+# https://docs.dhis2.org/master/en/developer/html/webapi.html
 
 # REST call examples:
 #   GET    /users       Get all users
@@ -49,8 +52,7 @@ from flask import Flask, request
 from flask_restful import Resource, Api
 import sqlalchemy
 
-app = None  # call initialize() to fill these up
-db = None
+db = None  # call initialize() to fill this up
 
 
 class Users(Resource):
@@ -72,8 +74,16 @@ class Users(Resource):
         conn = db.connect()
         for user in request.json['users']:
             values = ','.join('%r=%r' % k_v for k_v in user.items())
-            conn.execute('update users set %s where id=%s' % (values, user_id))
+            conn.execute('update users set %s where id=%d' % (values, user_id))
         return {'message': 'ok'}
+
+    def delete(self, user_id):
+        conn = db.connect()
+        result = conn.execute('delete from users where id=%d' % user_id)
+        if result.rowcount == 1:
+            return {'message': 'ok'}
+        else:
+            return {'message': 'error: unknown user id %d' % user_id}, 409
 
 
 class Projects(Resource):
@@ -96,9 +106,17 @@ class Projects(Resource):
         conn = db.connect()
         for project in request.json['projects']:
             values = ','.join('%r=%r' % k_v for k_v in project.items())
-            conn.execute('update projects set %s where id=%s' %
+            conn.execute('update projects set %s where id=%d' %
                 (values, project_id))
         return {'message': 'ok'}
+
+    def delete(self, project_id):
+        conn = db.connect()
+        result = conn.execute('delete from projects where id=%d' % project_id)
+        if result.rowcount == 1:
+            return {'message': 'ok'}
+        else:
+            return {'message': 'error: unknown project id %d' % project_id}, 409
 
 
 def get(conn, what, where):
@@ -116,21 +134,21 @@ def get_user(uid):
     "Return all the fields of a given user"
     conn = db.connect()
 
-    users = get(conn, 'id,name,password,mail,web', 'users where id=%s' % uid)
+    users = get(conn, 'id,name,password,mail,web', 'users where id=%d' % uid)
     if len(users) == 0:
-        return {'message': 'error: unknown user id %s' % uid}, 409
+        return {'message': 'error: unknown user id %d' % uid}, 409
 
     user = users[0]
 
     user['profiles'] = get0(conn, 'profile_name',
         'profiles where id in '
-            '(select id_profile from user_profiles where id_user=%s)' % uid)
+            '(select id_profile from user_profiles where id_user=%d)' % uid)
 
     user['projects_created'] = get0(conn, 'id_project',
-        'user_created_projects where id_user=%s' % uid)
+        'user_created_projects where id_user=%d' % uid)
 
     user['projects_joined'] = get0(conn, 'id_project',
-        'user_joined_projects where id_user=%s' % uid)
+        'user_joined_projects where id_user=%d' % uid)
 
     return nonempty(user)
 
@@ -147,21 +165,29 @@ def nonempty(d):
 def get_project(pid):
     "Return all the fields of a given project"
     conn = db.connect()
-    project = get(conn,
+
+    projects = get(conn,
         'id,creator,title,subtitle,description,url,img_bg,img1,img2',
-        'projects where id=%s' % pid)[0]
+        'projects where id=%d' % pid)
+    if len(projects) == 0:
+        return {'message': 'error: unknown project id %d' % pid}, 409
+
+    project = projects[0]
+
     project['participants'] = get0(conn, 'id_user',
-        'user_joined_projects where id_project=%s' % pid)
+        'user_joined_projects where id_project=%d' % pid)
+
     project['requested_profiles'] = get0(conn, 'profile_name',
         'profiles where id in '
         '  (select id_profile from project_requested_profiles '
-        '   where id_project=%s)' % pid)
+        '   where id_project=%d)' % pid)
+
     return project
 
 
 def initialize(db_name='smart.db'):
     "Initialize the database and the flask app"
-    global app, db
+    global db
     db = sqlalchemy.create_engine('sqlite:///%s' % db_name)
     app = Flask(__name__)
     errors = {
@@ -174,8 +200,9 @@ def initialize(db_name='smart.db'):
             'message': 'missing_field',
             'description': 'Seems you forgot something in your request.'}}
     api = Api(app, errors=errors)
-    api.add_resource(Users, '/users', '/users/<string:user_id>')
-    api.add_resource(Projects, '/projects', '/projects/<string:project_id>')
+    api.add_resource(Users, '/users', '/users/<int:user_id>')
+    api.add_resource(Projects, '/projects', '/projects/<int:project_id>')
+    return app
 
 
 def create_db():
@@ -190,5 +217,5 @@ def create_db():
 
 
 if __name__ == '__main__':
-    initialize()
+    app = initialize()
     app.run()
