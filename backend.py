@@ -55,6 +55,13 @@ import sqlalchemy
 db = None  # call initialize() to fill this up
 
 
+class NonexistingUserError(Exception):
+    pass
+
+class ExistingParticipantError(Exception):
+    pass
+
+
 class Users(Resource):
     def get(self, user_id=None):
         if not user_id:
@@ -105,6 +112,17 @@ class Projects(Resource):
 
     def put(self, project_id):
         conn = db.connect()
+
+        if 'newParticipant' in request.json:
+            add_participant(conn, project_id, request.json['newParticipant'])
+            request.json.pop('newParticipant')
+        if 'removeParticipant' in request.json:
+            remove_participant(conn, project_id,
+                request.json['removeParticipant'])
+            request.json.pop('removeParticipant')
+        if not request.json:
+            return {'message': 'ok'}
+
         kvs = ','.join('%r=%r' % k_v for k_v in request.json.items())
         res = conn.execute('update projects set %s where id=%d' %
             (kvs, project_id))
@@ -188,12 +206,40 @@ def strip(d):
     return d_stripped
 
 
+def add_participant(conn, pid, uid):
+    "Add a paticipant into a project"
+    participants_existing = get0(conn, 'id_user',
+        'user_joined_projects where id_project=%d' % pid)
+    if uid in participants_existing:
+        raise ExistingParticipantError
+    if len(get(conn, 'id', 'users where id=%d' % uid)) == 0:
+        raise NonexistingUserError
+    conn.execute('insert into user_joined_projects (id_user, id_project) '
+        'values (%d, %d)' % (uid, pid))
+
+
+def remove_participant(conn, pid, uid):
+    "Remove a participant from a project"
+    res = conn.execute('delete from user_joined_projects where '
+        'id_user=%d and id_project=%d' % (uid, pid))
+    if res.rowcount != 1:
+        raise NonexistingUserError
+
+
 def initialize(db_name='smart.db'):
     "Initialize the database and the flask app"
     global db
     db = sqlalchemy.create_engine('sqlite:///%s' % db_name)
     app = Flask(__name__)
     errors = {
+        'ExistingParticipantError': {
+            'status': 400,
+            'message': 'existing_participant',
+            'description': 'Tried to add an already existing participant.'},
+        'NonexistingUserError': {
+            'status': 400,
+            'message': 'nonexisting_user',
+            'description': 'Referenced a nonexisting user.'},
         'IntegrityError': {
             'status': 400,
             'message': 'bad_request',
