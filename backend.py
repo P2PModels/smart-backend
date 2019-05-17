@@ -60,21 +60,27 @@ class Users(Resource):
         else:
             return get_user(user_id)
 
-    def put(self, user_id=None):
-        if not user_id:
-            data = request.form['users']
-            conn = db.connect()
-            conn.execute('insert into users (%s) values (%s)' % (data.keys(), data.values()))
-            return {'message': 'ok'}
-        else:
-            conn = db.connect()
-            if len(get(conn, '*', 'users where id=%s' % user_id)) > 0:
-                return {'message': 'error: user %s already exists.' % user_id}
-            user = request.form['users'][0]
-            assert 'id' not in user
-            user['id'] = user_id
-            conn.execute('insert into users (%s) values (%s)' % (data.keys(), data.values()))
-            return {'message': 'ok'}
+    def post(self):
+        conn = db.connect()
+        print(request.form)
+        print(list(request.form.keys()))
+        # if 'users' not in request.form:
+        #     raise Exception('meh')
+        for user in request.form['users']:
+            conn.execute('insert into users (%s) values (%s)' %
+                         (user.keys(), user.values()))
+        return {'message': 'ok'}
+
+    def put(self, user_id):
+        conn = db.connect()
+        print(request.form)
+        print(list(request.form.keys()))
+        # if 'users' not in request.form:
+        #     raise Exception('meh')
+        for user in request.form['users']:
+            updates = ','.join('%r = %r' % k_v for k_v in user.items())
+            conn.execute('update users set %s where id=%s' % (updates, user_id))
+        return {'message': 'ok'}
 
 
 class Projects(Resource):
