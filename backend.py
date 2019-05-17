@@ -140,7 +140,13 @@ def initialize(db_name='smart.db'):
     global app, db
     db = sqlalchemy.create_engine('sqlite:///%s' % db_name)
     app = Flask(__name__)
-    api = Api(app)
+    api = Api(app,
+              errors={
+                  'Exception': {
+                      'status': 400,
+                      'message': 'bad_request',
+                      'some_description': 'Something wrong with request'
+                  }})
     api.add_resource(Users, '/users', '/users/<string:user_id>')
     api.add_resource(Projects, '/projects', '/projects/<string:project_id>')
 
