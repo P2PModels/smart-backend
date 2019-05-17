@@ -62,22 +62,14 @@ class Users(Resource):
 
     def post(self):
         conn = db.connect()
-        print(request.form)
-        print(list(request.form.keys()))
-        # if 'users' not in request.form:
-        #     raise Exception('meh')
-        for user in request.form['users']:
+        for user in request.json['users']:
             conn.execute('insert into users (%s) values (%s)' %
-                         (user.keys(), user.values()))
+                         (','.join(user.keys()), ','.join(map(str, user.values()))))
         return {'message': 'ok'}
 
     def put(self, user_id):
         conn = db.connect()
-        print(request.form)
-        print(list(request.form.keys()))
-        # if 'users' not in request.form:
-        #     raise Exception('meh')
-        for user in request.form['users']:
+        for user in request.json['users']:
             updates = ','.join('%r = %r' % k_v for k_v in user.items())
             conn.execute('update users set %s where id=%s' % (updates, user_id))
         return {'message': 'ok'}
