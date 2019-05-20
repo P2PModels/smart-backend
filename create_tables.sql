@@ -1,3 +1,11 @@
+drop table if exists users;
+create table users (
+    id int primary key not null,
+    name text not null,
+    password text not null,
+    mail text,
+    web text);
+
 drop table if exists projects;
 create table projects (
     id int primary key not null,
@@ -9,14 +17,6 @@ create table projects (
     img_bg text,
     img1 text,
     img2 text);
-
-drop table if exists users;
-create table users (
-    id int primary key not null,
-    name text not null,
-    password text not null,
-    mail text,
-    web text);
 
 drop table if exists profiles;
 create table profiles (
