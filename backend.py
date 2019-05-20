@@ -49,10 +49,18 @@ to the world.
 
 
 from flask import Flask, request
+from flask_httpauth import HTTPBasicAuth
 from flask_restful import Resource, Api
 import sqlalchemy
 
 db = None  # call initialize() to fill this up
+auth = HTTPBasicAuth()
+
+@auth.get_password
+def get_pw(name):
+    conn = db.connect()
+    passwds = get0(conn, 'password', 'users where name=%r' % name)
+    return passwds[0] if len(passwds) == 1 else None
 
 
 class NonexistingUserError(Exception):
@@ -63,6 +71,7 @@ class ExistingParticipantError(Exception):
 
 
 class Users(Resource):
+    @auth.login_required
     def get(self, user_id=None):
         if not user_id:
             users = get(db.connect(), 'id,name,password,mail,web', 'users')
@@ -70,12 +79,14 @@ class Users(Resource):
         else:
             return get_user(user_id)
 
+    @auth.login_required
     def post(self):
         conn = db.connect()
         conn.execute('insert into users %r values %r' %
             tuple(zip(*request.json.items())))
         return {'message': 'ok'}
 
+    @auth.login_required
     def put(self, user_id):
         conn = db.connect()
         kvs = ','.join('%r=%r' % k_v for k_v in request.json.items())
@@ -85,6 +96,7 @@ class Users(Resource):
         else:
             return {'message': 'error: unknown user id %d' % user_id}, 409
 
+    @auth.login_required
     def delete(self, user_id):
         conn = db.connect()
         res = conn.execute('delete from users where id=%d' % user_id)
@@ -95,6 +107,7 @@ class Users(Resource):
 
 
 class Projects(Resource):
+    @auth.login_required
     def get(self, project_id=None):
         if not project_id:
             projects = get(db.connect(),
@@ -104,15 +117,18 @@ class Projects(Resource):
         else:
             return get_project(project_id)
 
+    @auth.login_required
     def post(self):
         conn = db.connect()
         conn.execute('insert into projects %r values %r' %
             tuple(zip(*request.json.items())))
         return {'message': 'ok'}, 201
 
+    @auth.login_required
     def put(self, project_id):
         conn = db.connect()
 
+        # This part may not be very RESTful...
         if 'newParticipant' in request.json:
             add_participant(conn, project_id, request.json['newParticipant'])
             request.json.pop('newParticipant')
@@ -131,6 +147,7 @@ class Projects(Resource):
         else:
             return {'message': 'error: unknown project id %d' % project_id}, 409
 
+    @auth.login_required
     def delete(self, project_id):
         conn = db.connect()
         res = conn.execute('delete from projects where id=%d' % project_id)
