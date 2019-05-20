@@ -48,19 +48,24 @@ to the world.
 #   requested_profiles: list of str
 
 
+import hashlib
 from flask import Flask, request
 from flask_httpauth import HTTPBasicAuth
 from flask_restful import Resource, Api
 import sqlalchemy
 
 db = None  # call initialize() to fill this up
-auth = HTTPBasicAuth()
+auth = HTTPBasicAuth()  # see https://flask-httpauth.readthedocs.io/
 
 @auth.get_password
 def get_pw(name):
     conn = db.connect()
-    passwds = get0(conn, 'password', 'users where name=%r' % name)
-    return passwds[0] if len(passwds) == 1 else None
+    passwords = get0(conn, 'password', 'users where name=%r' % name)
+    return passwords[0] if len(passwords) == 1 else None
+
+@auth.hash_password
+def hash_pw(password):
+    return hashlib.sha256(password.encode('utf8')).hexdigest()
 
 
 class NonexistingUserError(Exception):

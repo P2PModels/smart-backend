@@ -1,9 +1,17 @@
 -- Run this file to add sample values into the database.
 
 insert into users values
-    (1, 'jordi', 'abc', 'jordi@ucm.es', 'https://example1.org'),
-    (2, 'sem', '123', 'sem@ucm.es', 'https://example2.org'),
-    (3, 'antonio', 'xyz', 'antonio@ucm.es', 'http://example3.org');
+    (1, 'jordi', 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+     'jordi@ucm.es', 'https://example1.org'),
+    (2, 'sem', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3',
+     'sem@ucm.es', 'https://example2.org'),
+    (3, 'antonio', '3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282',
+     'antonio@ucm.es', 'http://example3.org');
+
+-- abc -> ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+-- 123 -> a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3
+-- xyz -> 3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282
+
 
 insert into profiles values
     (1, 'coder'),
