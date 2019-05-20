@@ -55,6 +55,10 @@ from flask_restful import Resource, Api
 import sqlalchemy
 
 db = None  # call initialize() to fill this up
+
+
+# Set up the authentication requirements.
+
 auth = HTTPBasicAuth()  # see https://flask-httpauth.readthedocs.io/
 
 @auth.get_password
@@ -68,12 +72,16 @@ def hash_pw(password):
     return hashlib.sha256(password.encode('utf8')).hexdigest()
 
 
+# Define the customized exceptions.
+
 class NonexistingUserError(Exception):
     pass
 
 class ExistingParticipantError(Exception):
     pass
 
+
+# REST api.
 
 class Users(Resource):
     @auth.login_required
@@ -161,6 +169,8 @@ class Projects(Resource):
         else:
             return {'message': 'error: unknown project id %d' % project_id}, 409
 
+
+# Auxiliary functions.
 
 def get(conn, what, where):
     "Return result of the query 'select what from where' as a dict"
@@ -278,16 +288,6 @@ def initialize(db_name='smart.db'):
     api.add_resource(Users, '/users', '/users/<int:user_id>')
     api.add_resource(Projects, '/projects', '/projects/<int:project_id>')
     return app
-
-
-def create_db():
-    "Create an empty database with the appropriate tables"
-    conn = db.connect()
-    for sql in open('create_tables.sql').read().split('\n\n'):
-        try:
-            conn.execute(sql)
-        except sqlalchemy.exc.OperationalError as e:
-            print(e.args[0])
 
 
 
