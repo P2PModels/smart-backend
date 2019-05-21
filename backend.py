@@ -6,11 +6,10 @@ to the world.
 """
 
 # TODO:
-#   * Use bearer authentication (use python3-flask-httpauth MultiAuth, see
-#     https://flask-httpauth.readthedocs.io/en/latest/).
 #   * Make the POST, PUT and DELETE calls work properly linking list of
 #     projects, participants and so on (projects_created, projects_joined,
 #     participants and requested_profiles).
+#   * Catch and process well all cases when request.json is empty or invalid.
 
 # We will take ideas for our api from
 # https://docs.dhis2.org/master/en/developer/html/webapi.html
@@ -50,26 +49,38 @@ to the world.
 
 import hashlib
 from flask import Flask, request
-from flask_httpauth import HTTPBasicAuth
+from flask_httpauth import HTTPBasicAuth, HTTPTokenAuth, MultiAuth
 from flask_restful import Resource, Api
 import sqlalchemy
+from itsdangerous import TimedJSONWebSignatureSerializer as JSONSigSerializer
 
 db = None  # call initialize() to fill this up
+serializer = None
 
 
-# Set up the authentication requirements.
+# Set up the authentication (see https://flask-httpauth.readthedocs.io/)
 
-auth = HTTPBasicAuth()  # see https://flask-httpauth.readthedocs.io/
+auth_basic = HTTPBasicAuth()
+auth_token = HTTPTokenAuth('Bearer')
+auth = MultiAuth(auth_basic, auth_token)
 
-@auth.get_password
+@auth_basic.get_password
 def get_pw(name):
     conn = db.connect()
     passwords = get0(conn, 'password', 'users where name=%r' % name)
     return passwords[0] if len(passwords) == 1 else None
 
-@auth.hash_password
+@auth_basic.hash_password
 def hash_pw(password):
-    return hashlib.sha256(password.encode('utf8')).hexdigest()
+    return sha256(password)
+
+@auth_token.verify_token
+def verify_token(token):
+    try:
+        serializer.loads(token)
+        return True
+    except:
+        return False
 
 
 # Define the customized exceptions.
@@ -82,6 +93,18 @@ class ExistingParticipantError(Exception):
 
 
 # REST api.
+
+class Login(Resource):
+    def post(self):
+        username, password = [request.json[x] for x in ['username', 'password']]
+        conn = db.connect()
+        passwords = get0(conn, 'password', 'users where name=%r' % username)
+        if len(passwords) == 1 and passwords[0] == sha256(password):
+            token = serializer.dumps({'username': username}).decode('utf8')
+            return {"access_token": token}
+        else:
+            return None
+
 
 class Users(Resource):
     @auth.login_required
@@ -258,11 +281,21 @@ def remove_participant(conn, pid, uid):
         raise NonexistingUserError
 
 
-def initialize(db_name='smart.db'):
+def sha256(txt):
+    return hashlib.sha256(txt.encode('utf8')).hexdigest()
+
+
+# App initialization.
+
+def initialize(db_name='smart.db', secret_key='top secret'):
     "Initialize the database and the flask app"
-    global db
+    global db, serializer
     db = sqlalchemy.create_engine('sqlite:///%s' % db_name)
     app = Flask(__name__)
+
+    app.config['SECRET_KEY'] = secret_key
+    serializer = JSONSigSerializer(app.config['SECRET_KEY'], expires_in=3600)
+
     errors = {
         'ExistingParticipantError': {
             'status': 400,
@@ -285,6 +318,7 @@ def initialize(db_name='smart.db'):
             'message': 'missing_field',
             'description': 'Seems you forgot something in your request.'}}
     api = Api(app, errors=errors)
+    api.add_resource(Login, '/login')
     api.add_resource(Users, '/users', '/users/<int:user_id>')
     api.add_resource(Projects, '/projects', '/projects/<int:project_id>')
     return app

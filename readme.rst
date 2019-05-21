@@ -13,6 +13,17 @@ Example tests::
     -d'{"id": 6, "creator": 1, "title":"boo"}' \
     -w '\nReturn code: %{http_code}\n' http://localhost:5000/projects
 
+  curl -H "Content-Type: application/json" -X POST \
+    -d '{"username": "jordi", "password": "abc"}' \
+    -w '\nReturn code: %{http_code}\n' http://localhost:5000/login
+
+
+To keep on going with bearer authentication, take the returned token and use
+it in the next calls like::
+
+  curl -H "Content-Type: application/json" -H "Authorization: Bearer $token" \
+    -w '\nReturn code: %{http_code}\n' http://localhost:5000/users
+
 
 Ideally, I'd like this kind of queries to work here too::
 
