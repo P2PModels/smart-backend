@@ -66,8 +66,7 @@ auth = MultiAuth(auth_basic, auth_token)
 
 @auth_basic.get_password
 def get_pw(name):
-    conn = db.connect()
-    passwords = get0(conn, 'password', 'users where name=%r' % name)
+    passwords = get0('password', 'users where name=%r' % name)
     return passwords[0] if len(passwords) == 1 else None
 
 @auth_basic.hash_password
@@ -97,8 +96,7 @@ class ExistingParticipantError(Exception):
 class Login(Resource):
     def post(self):
         username, password = [request.json[x] for x in ['username', 'password']]
-        conn = db.connect()
-        passwords = get0(conn, 'password', 'users where name=%r' % username)
+        passwords = get0('password', 'users where name=%r' % username)
         if len(passwords) == 1 and passwords[0] == sha256(password):
             token = serializer.dumps({'username': username}).decode('utf8')
             return {"access_token": token}
@@ -110,23 +108,21 @@ class Users(Resource):
     @auth.login_required
     def get(self, user_id=None):
         if not user_id:
-            users = get(db.connect(), 'id,name,password,mail,web', 'users')
+            users = get('id,name,password,mail,web', 'users')
             return [strip(x) for x in users]
         else:
             return get_user(user_id)
 
     @auth.login_required
     def post(self):
-        conn = db.connect()
-        conn.execute('insert into users %r values %r' %
-            tuple(zip(*request.json.items())))
+        cols, vals = zip(*request.json.items())
+        dbexe('insert into users %r values %r' % (cols, vals))
         return {'message': 'ok'}
 
     @auth.login_required
     def put(self, user_id):
-        conn = db.connect()
         kvs = ','.join('%r=%r' % k_v for k_v in request.json.items())
-        res = conn.execute('update users set %s where id=%d' % (kvs, user_id))
+        res = dbexe('update users set %s where id=%d' % (kvs, user_id))
         if res.rowcount == 1:
             return {'message': 'ok'}
         else:
@@ -134,8 +130,7 @@ class Users(Resource):
 
     @auth.login_required
     def delete(self, user_id):
-        conn = db.connect()
-        res = conn.execute('delete from users where id=%d' % user_id)
+        res = dbexe('delete from users where id=%d' % user_id)
         if res.rowcount == 1:
             return {'message': 'ok'}
         else:
@@ -146,7 +141,7 @@ class Projects(Resource):
     @auth.login_required
     def get(self, project_id=None):
         if not project_id:
-            projects = get(db.connect(),
+            projects = get(
                 'id,creator,title,subtitle,description,url,img_bg,img1,img2',
                 'projects')
             return [strip(x) for x in projects]
@@ -155,29 +150,24 @@ class Projects(Resource):
 
     @auth.login_required
     def post(self):
-        conn = db.connect()
-        conn.execute('insert into projects %r values %r' %
-            tuple(zip(*request.json.items())))
+        cols, vals = zip(*request.json.items())
+        dbexe('insert into projects %r values %r' % (cols, vals))
         return {'message': 'ok'}, 201
 
     @auth.login_required
     def put(self, project_id):
-        conn = db.connect()
-
         # This part may not be very RESTful...
         if 'newParticipant' in request.json:
-            add_participant(conn, project_id, request.json['newParticipant'])
+            add_participant(project_id, request.json['newParticipant'])
             request.json.pop('newParticipant')
         if 'removeParticipant' in request.json:
-            remove_participant(conn, project_id,
-                request.json['removeParticipant'])
+            remove_participant(project_id, request.json['removeParticipant'])
             request.json.pop('removeParticipant')
         if not request.json:
             return {'message': 'ok'}
 
         kvs = ','.join('%r=%r' % k_v for k_v in request.json.items())
-        res = conn.execute('update projects set %s where id=%d' %
-            (kvs, project_id))
+        res = dbexe('update projects set %s where id=%d' % (kvs, project_id))
         if res.rowcount == 1:
             return {'message': 'ok'}
         else:
@@ -185,8 +175,7 @@ class Projects(Resource):
 
     @auth.login_required
     def delete(self, project_id):
-        conn = db.connect()
-        res = conn.execute('delete from projects where id=%d' % project_id)
+        res = dbexe('delete from projects where id=%d' % project_id)
         if res.rowcount == 1:
             return {'message': 'ok'}
         else:
@@ -195,35 +184,37 @@ class Projects(Resource):
 
 # Auxiliary functions.
 
-def get(conn, what, where):
+def dbexe(command):
+    return db.connect().execute(command)
+
+
+def get(what, where):
     "Return result of the query 'select what from where' as a dict"
-    res = conn.execute('select %s from %s' % (what, where)).fetchall()
+    res = dbexe('select %s from %s' % (what, where)).fetchall()
     return [dict(zip(what.split(','), x)) for x in res]
 
 
-def get0(conn, what, where):
+def get0(what, where):
     "Return a list of the selected elements from get()"
-    return [x[what] for x in get(conn, what, where)]
+    return [x[what] for x in get(what, where)]
 
 
 def get_user(uid):
     "Return all the fields of a given user"
-    conn = db.connect()
-
-    users = get(conn, 'id,name,password,mail,web', 'users where id=%d' % uid)
+    users = get('id,name,password,mail,web', 'users where id=%d' % uid)
     if len(users) == 0:
         return {'message': 'error: unknown user id %d' % uid}, 409
 
     user = users[0]
 
-    user['profiles'] = get0(conn, 'profile_name',
+    user['profiles'] = get0('profile_name',
         'profiles where id in '
             '(select id_profile from user_profiles where id_user=%d)' % uid)
 
-    user['projects_created'] = get0(conn, 'id_project',
+    user['projects_created'] = get0('id_project',
         'user_created_projects where id_user=%d' % uid)
 
-    user['projects_joined'] = get0(conn, 'id_project',
+    user['projects_joined'] = get0('id_project',
         'user_joined_projects where id_user=%d' % uid)
 
     return strip(user)
@@ -231,9 +222,7 @@ def get_user(uid):
 
 def get_project(pid):
     "Return all the fields of a given project"
-    conn = db.connect()
-
-    projects = get(conn,
+    projects = get(
         'id,creator,title,subtitle,description,url,img_bg,img1,img2',
         'projects where id=%d' % pid)
     if len(projects) == 0:
@@ -241,10 +230,10 @@ def get_project(pid):
 
     project = projects[0]
 
-    project['participants'] = get0(conn, 'id_user',
+    project['participants'] = get0('id_user',
         'user_joined_projects where id_project=%d' % pid)
 
-    project['requested_profiles'] = get0(conn, 'profile_name',
+    project['requested_profiles'] = get0('profile_name',
         'profiles where id in '
         '  (select id_profile from project_requested_profiles '
         '   where id_project=%d)' % pid)
@@ -261,21 +250,21 @@ def strip(d):
     return d_stripped
 
 
-def add_participant(conn, pid, uid):
+def add_participant(pid, uid):
     "Add a paticipant into a project"
-    participants_existing = get0(conn, 'id_user',
+    participants_existing = get0('id_user',
         'user_joined_projects where id_project=%d' % pid)
     if uid in participants_existing:
         raise ExistingParticipantError
-    if len(get(conn, 'id', 'users where id=%d' % uid)) == 0:
+    if len(get('id', 'users where id=%d' % uid)) == 0:
         raise NonexistingUserError
-    conn.execute('insert into user_joined_projects (id_user, id_project) '
+    dbexe('insert into user_joined_projects (id_user, id_project) '
         'values (%d, %d)' % (uid, pid))
 
 
-def remove_participant(conn, pid, uid):
+def remove_participant(pid, uid):
     "Remove a participant from a project"
-    res = conn.execute('delete from user_joined_projects where '
+    res = dbexe('delete from user_joined_projects where '
         'id_user=%d and id_project=%d' % (uid, pid))
     if res.rowcount != 1:
         raise NonexistingUserError
