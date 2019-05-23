@@ -8,6 +8,7 @@ Run with "pytest-3".
 
 import urllib.request as req
 import urllib.error
+import json
 
 
 # Use basic authentication.
@@ -18,5 +19,7 @@ req.install_opener(req.build_opener(req.HTTPBasicAuthHandler(mgr)))
 
 def test_get_users():
     contents = req.urlopen('http://localhost:5000/users').read()
-    # TODO: test if it is a nice json or something
-    return True  # otherwise, an exception happened
+    data = json.loads(contents)
+    assert type(data) == list
+    assert data[0]['id'] == 1
+    assert data[0]['name'] == 'jordi'
