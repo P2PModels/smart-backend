@@ -10,16 +10,106 @@ import urllib.request as req
 import urllib.error
 import json
 
+urlbase = 'http://localhost:5000/'
 
-# Use basic authentication.
-mgr = req.HTTPPasswordMgrWithDefaultRealm()
-mgr.add_password(None, 'http://localhost:5000/', 'jordi', 'abc')
-req.install_opener(req.build_opener(req.HTTPBasicAuthHandler(mgr)))
+
+def get(*args, **kwargs):
+    "Return the json response from a url, accessed by basic authentication."
+    mgr = req.HTTPPasswordMgrWithDefaultRealm()
+    mgr.add_password(None, urlbase, 'jordi', 'abc')
+    opener = req.build_opener(req.HTTPBasicAuthHandler(mgr))
+    headers = {'Content-Type': 'application/json'}
+    r = req.Request(urlbase + args[0], *args[1:], **kwargs, headers=headers)
+    return json.loads(opener.open(r).read())
+
+
+def jdumps(obj):
+    return json.dumps(obj).encode('utf8')
+
+
+def test_not_found():
+    try:
+        req.urlopen(urlbase)
+    except urllib.error.HTTPError as e:
+        assert (e.getcode(), e.msg) == (404, 'NOT FOUND')
+
+
+def test_unauthorized():
+    try:
+        req.urlopen(urlbase + 'users')
+    except urllib.error.HTTPError as e:
+        assert (e.getcode(), e.msg) == (401, 'UNAUTHORIZED')
+
+
+def test_auth_basic():
+    get('users')
+
+
+def test_auth_bearer():
+    res = get('login',
+        data=b'{"username": "jordi", "password": "abc"}')
+    auth_txt = 'Bearer ' + res['access_token']
+    r = req.Request(urlbase + 'users', headers={'Authorization': auth_txt})
+    req.urlopen(r)
 
 
 def test_get_users():
-    contents = req.urlopen('http://localhost:5000/users').read()
-    data = json.loads(contents)
-    assert type(data) == list
-    assert data[0]['id'] == 1
-    assert data[0]['name'] == 'jordi'
+    res = get('users')
+    assert type(res) == list
+    assert all(x in res[0] for x in 'id name password web mail'.split())
+    assert res[0]['id'] == 1
+    assert res[0]['name'] == 'jordi'
+
+
+def test_get_projects():
+    res = get('projects')
+    assert type(res) == list
+    keys = 'id creator title subtitle description url img_bg img1 img2'.split()
+    assert all(x in res[0] for x in keys)
+    assert res[0]['id'] == 1
+    assert res[0]['creator'] == 1
+
+
+
+def add_test_user():
+    try:
+        get('users/1000')
+        raise Exception('User with id 1000 already exists.')
+    except urllib.error.HTTPError as e:
+        pass
+
+    data = jdumps({'id': 1000, 'name': 'test_user', 'password': 'booo'})
+    return get('users', data=data)
+
+
+def del_test_user():
+    return get('users/1000', method='DELETE')
+
+
+def test_add_user():
+    res = add_test_user()
+    assert res['message'] == 'ok'
+
+    res = del_test_user()
+    assert res['message'] == 'ok'
+
+
+def test_change_user():
+    add_test_user()
+
+    res = get('users/1000', method='PUT', data=jdumps({'password': 'easy'}))
+    assert res['message'] == 'ok'
+
+    del_test_user()
+
+
+def test_add_del_participant():
+    add_test_user()
+
+    res = get('projects/1', method='PUT', data=jdumps({'addParticipant': 1000}))
+    assert res['message'] == 'ok'
+
+    res = get('projects/1', method='PUT', data=jdumps({'delParticipant': 1000}))
+    assert res['message'] == 'ok'
+
+    del_test_user()
