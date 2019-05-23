@@ -161,12 +161,12 @@ class Projects(Resource):
     @auth.login_required
     def put(self, project_id):
         # This part may not be very RESTful...
-        if 'newParticipant' in request.json:
-            add_participant(project_id, request.json['newParticipant'])
-            request.json.pop('newParticipant')
-        if 'removeParticipant' in request.json:
-            remove_participant(project_id, request.json['removeParticipant'])
-            request.json.pop('removeParticipant')
+        if 'addParticipant' in request.json:
+            add_participant(project_id, request.json['addParticipant'])
+            request.json.pop('addParticipant')
+        if 'delParticipant' in request.json:
+            remove_participant(project_id, request.json['delParticipant'])
+            request.json.pop('delParticipant')
         if not request.json:
             return {'message': 'ok'}
 
