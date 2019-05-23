@@ -115,6 +115,8 @@ class Users(Resource):
 
     @auth.login_required
     def post(self):
+        if not request.json:
+            raise KeyError
         cols, vals = zip(*request.json.items())
         dbexe('insert into users %r values %r' % (cols, vals))
         return {'message': 'ok'}
@@ -150,6 +152,8 @@ class Projects(Resource):
 
     @auth.login_required
     def post(self):
+        if not request.json:
+            raise KeyError
         cols, vals = zip(*request.json.items())
         dbexe('insert into projects %r values %r' % (cols, vals))
         return {'message': 'ok'}, 201
