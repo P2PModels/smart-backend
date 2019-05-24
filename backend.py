@@ -6,9 +6,7 @@ to the world.
 """
 
 # TODO:
-#   * Make the POST, PUT and DELETE calls work properly linking list of
-#     projects, participants and so on (projects_created, projects_joined,
-#     participants and requested_profiles).
+#   * Add user permissions to see & change data (needs extra field in DB).
 #   * Catch and process well all cases when request.json is empty or invalid.
 
 # We will take ideas for our api from
