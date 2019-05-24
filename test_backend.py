@@ -13,6 +13,8 @@ import json
 urlbase = 'http://localhost:5000/'
 
 
+# Helper functions.
+
 def get(*args, **kwargs):
     "Return the json response from a url, accessed by basic authentication."
     mgr = req.HTTPPasswordMgrWithDefaultRealm()
@@ -26,6 +28,38 @@ def get(*args, **kwargs):
 def jdumps(obj):
     return json.dumps(obj).encode('utf8')
 
+
+def add_test_user():
+    try:
+        get('users/1000')
+        raise Exception('User with id 1000 already exists.')
+    except urllib.error.HTTPError as e:
+        pass
+
+    data = jdumps({'id': 1000, 'name': 'test_user', 'password': 'booo'})
+    return get('users', data=data)
+
+
+def del_test_user():
+    return get('users/1000', method='DELETE')
+
+
+def add_test_project():
+    try:
+        get('projects/1000')
+        raise Exception('Project with id 1000 already exists.')
+    except urllib.error.HTTPError as e:
+        pass
+
+    data = jdumps({'id': 1000, 'creator': 1, 'title': 'Test project'})
+    return get('projects', data=data)
+
+
+def del_test_project():
+    return get('projects/1000', method='DELETE')
+
+
+# The tests.
 
 def test_not_found():
     try:
@@ -46,8 +80,7 @@ def test_auth_basic():
 
 
 def test_auth_bearer():
-    res = get('login',
-        data=b'{"username": "jordi", "password": "abc"}')
+    res = get('login', data=b'{"username": "jordi", "password": "abc"}')
     auth_txt = 'Bearer ' + res['access_token']
     r = req.Request(urlbase + 'users', headers={'Authorization': auth_txt})
     req.urlopen(r)
@@ -70,27 +103,19 @@ def test_get_projects():
     assert res[0]['creator'] == 1
 
 
-
-def add_test_user():
-    try:
-        get('users/1000')
-        raise Exception('User with id 1000 already exists.')
-    except urllib.error.HTTPError as e:
-        pass
-
-    data = jdumps({'id': 1000, 'name': 'test_user', 'password': 'booo'})
-    return get('users', data=data)
-
-
-def del_test_user():
-    return get('users/1000', method='DELETE')
-
-
-def test_add_user():
+def test_add_del_user():
     res = add_test_user()
     assert res['message'] == 'ok'
 
     res = del_test_user()
+    assert res['message'] == 'ok'
+
+
+def test_add_del_project():
+    res = add_test_project()
+    assert res['message'] == 'ok'
+
+    res = del_test_project()
     assert res['message'] == 'ok'
 
 
@@ -103,6 +128,17 @@ def test_change_user():
     del_test_user()
 
 
+def test_change_project():
+    add_test_project()
+    assert get('projects/1000')['title'] == 'Test project'
+
+    res = get('projects/1000', method='PUT', data=jdumps({'title': 'changed'}))
+    assert res['message'] == 'ok'
+
+    assert get('projects/1000')['title'] == 'changed'
+    del_test_project()
+
+
 def test_add_del_participant():
     add_test_user()
 
@@ -113,3 +149,7 @@ def test_add_del_participant():
     assert res['message'] == 'ok'
 
     del_test_user()
+
+
+def test_get_info():
+    assert get('info') == get('users/1')
