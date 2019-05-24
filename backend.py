@@ -134,10 +134,17 @@ class Users(Resource):
     @auth.login_required
     def delete(self, user_id):
         res = dbexe('delete from users where id=%d' % user_id)
-        if res.rowcount == 1:
-            return {'message': 'ok'}
-        else:
+        if res.rowcount != 1:
             return {'message': 'error: unknown user id %d' % user_id}, 409
+
+        dbexe('delete from user_profiles where id_user=%d' % user_id)
+        dbexe('delete from user_created_projects where id_user=%d' % user_id)
+        dbexe('delete from user_joined_projects where id_user=%d' % user_id)
+
+        for pid in get0('id', 'projects where creator=%d' % user_id):
+            del_project(pid)
+
+        return {'message': 'ok'}
 
 
 class Projects(Resource):
@@ -180,11 +187,11 @@ class Projects(Resource):
 
     @auth.login_required
     def delete(self, project_id):
-        res = dbexe('delete from projects where id=%d' % project_id)
-        if res.rowcount == 1:
-            return {'message': 'ok'}
-        else:
+        ids = get0('id', 'projects where id=%d' % project_id)
+        if len(ids) != 1:
             return {'message': 'error: unknown project id %d' % project_id}, 409
+        del_project(project_id)
+        return {'message': 'ok'}
 
 
 class Info(Resource):
@@ -251,6 +258,14 @@ def get_project(pid):
         '   where id_project=%d)' % pid)
 
     return strip(project)
+
+
+def del_project(pid):
+    "Delete a project and everywhere where it appears referenced"
+    dbexe('delete from projects where id=%d' % pid)
+    dbexe('delete from user_created_projects where id_project=%d' % pid)
+    dbexe('delete from user_joined_projects where id_project=%d' % pid)
+    dbexe('delete from project_requested_profiles where id_project=%d' % pid)
 
 
 def strip(d):
