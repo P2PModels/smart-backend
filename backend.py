@@ -187,6 +187,13 @@ class Projects(Resource):
             return {'message': 'error: unknown project id %d' % project_id}, 409
 
 
+class Info(Resource):
+    @auth.login_required
+    def get(self):
+        uid = get0('id', 'users where name=%r' % g.user)[0]
+        return get_user(uid)
+
+
 # Auxiliary functions.
 
 def dbexe(command):
@@ -315,6 +322,7 @@ def initialize(db_name='smart.db', secret_key='top secret'):
     api.add_resource(Login, '/login')
     api.add_resource(Users, '/users', '/users/<int:user_id>')
     api.add_resource(Projects, '/projects', '/projects/<int:project_id>')
+    api.add_resource(Info, '/info')
     return app
 
 
