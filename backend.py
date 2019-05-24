@@ -48,7 +48,7 @@ to the world.
 
 
 import hashlib
-from flask import Flask, request
+from flask import Flask, request, g
 from flask_httpauth import HTTPBasicAuth, HTTPTokenAuth, MultiAuth
 from flask_restful import Resource, Api
 import sqlalchemy
@@ -66,6 +66,7 @@ auth = MultiAuth(auth_basic, auth_token)
 
 @auth_basic.get_password
 def get_pw(name):
+    g.user = name
     passwords = get0('password', 'users where name=%r' % name)
     return passwords[0] if len(passwords) == 1 else None
 
@@ -76,7 +77,7 @@ def hash_pw(password):
 @auth_token.verify_token
 def verify_token(token):
     try:
-        serializer.loads(token)
+        g.user = serializer.loads(token)
         return True
     except:
         return False
