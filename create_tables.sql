@@ -1,3 +1,5 @@
+-- Run this file to (re)create all the tables needed for the backend.
+
 drop table if exists users;
 create table users (
     id int primary key not null,

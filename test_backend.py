@@ -15,7 +15,7 @@ urlbase = 'http://localhost:5000/'
 
 # Helper functions.
 
-def get(*args, **kwargs):
+def request(*args, **kwargs):
     "Return the json response from a url, accessed by basic authentication."
     mgr = req.HTTPPasswordMgrWithDefaultRealm()
     mgr.add_password(None, urlbase, 'jordi', 'abc')
@@ -23,6 +23,24 @@ def get(*args, **kwargs):
     headers = {'Content-Type': 'application/json'}
     r = req.Request(urlbase + args[0], *args[1:], **kwargs, headers=headers)
     return json.loads(opener.open(r).read())
+
+
+def get(*args, **kwargs):
+    assert 'data' not in kwargs, 'Error: requests with data should be POST'
+    return request(*args, **kwargs, method='GET')
+
+
+def post(*args, **kwargs):
+    assert 'data' in kwargs, 'Error: POST requests must have data'
+    return request(*args, **kwargs, method='POST')
+
+
+def put(*args, **kwargs):
+    return request(*args, **kwargs, method='PUT')
+
+
+def delete(*args, **kwargs):
+    return request(*args, **kwargs, method='DELETE')
 
 
 def jdumps(obj):
@@ -37,11 +55,11 @@ def add_test_user():
         pass
 
     data = jdumps({'id': 1000, 'name': 'test_user', 'password': 'booo'})
-    return get('users', data=data)
+    return post('users', data=data)
 
 
 def del_test_user():
-    return get('users/1000', method='DELETE')
+    return delete('users/1000')
 
 
 def add_test_project():
@@ -52,11 +70,11 @@ def add_test_project():
         pass
 
     data = jdumps({'id': 1000, 'creator': 1, 'title': 'Test project'})
-    return get('projects', data=data)
+    return post('projects', data=data)
 
 
 def del_test_project():
-    return get('projects/1000', method='DELETE')
+    return delete('projects/1000')
 
 
 # The tests.
@@ -80,7 +98,7 @@ def test_auth_basic():
 
 
 def test_auth_bearer():
-    res = get('login', data=b'{"username": "jordi", "password": "abc"}')
+    res = post('login', data=b'{"username": "jordi", "password": "abc"}')
     auth_txt = 'Bearer ' + res['access_token']
     r = req.Request(urlbase + 'users', headers={'Authorization': auth_txt})
     req.urlopen(r)
@@ -121,10 +139,12 @@ def test_add_del_project():
 
 def test_change_user():
     add_test_user()
+    assert get('users/1000')['name'] == 'test_user'
 
-    res = get('users/1000', method='PUT', data=jdumps({'password': 'easy'}))
+    res = put('users/1000', data=jdumps({'name': 'newman'}))
     assert res['message'] == 'ok'
 
+    assert get('users/1000')['name'] == 'newman'
     del_test_user()
 
 
@@ -132,7 +152,7 @@ def test_change_project():
     add_test_project()
     assert get('projects/1000')['title'] == 'Test project'
 
-    res = get('projects/1000', method='PUT', data=jdumps({'title': 'changed'}))
+    res = put('projects/1000', data=jdumps({'title': 'changed'}))
     assert res['message'] == 'ok'
 
     assert get('projects/1000')['title'] == 'changed'
@@ -141,13 +161,17 @@ def test_change_project():
 
 def test_add_del_participant():
     add_test_user()
+    add_test_project()
 
-    res = get('projects/1', method='PUT', data=jdumps({'addParticipant': 1000}))
+    res = put('projects/1000', data=jdumps({'addParticipant': 1000}))
     assert res['message'] == 'ok'
 
-    res = get('projects/1', method='PUT', data=jdumps({'delParticipant': 1000}))
+    assert 1000 in get('projects/1000')['participants']
+
+    res = put('projects/1000', data=jdumps({'delParticipant': 1000}))
     assert res['message'] == 'ok'
 
+    del_test_project()
     del_test_user()
 
 
