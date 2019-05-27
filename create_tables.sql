@@ -3,8 +3,10 @@
 drop table if exists users;
 create table users (
     id int primary key not null,
-    name text not null,
+    username text not null unique,
+    fullname text not null,
     password text not null,
+    permissions text,
     mail text,
     web text);
 

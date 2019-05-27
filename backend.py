@@ -23,8 +23,10 @@ to the world.
 #
 # user
 #   id: int
-#   name: str
+#   username: str
+#   fullname: str
 #   password: str
+#   permissions: str
 #   mail: str
 #   web: str
 #   profiles: list of str
@@ -63,9 +65,9 @@ auth_token = HTTPTokenAuth('Bearer')
 auth = MultiAuth(auth_basic, auth_token)
 
 @auth_basic.get_password
-def get_pw(name):
-    g.user = name
-    passwords = get0('password', 'users where name=%r' % name)
+def get_pw(username):
+    g.username = username
+    passwords = get0('password', 'users where username=%r' % username)
     return passwords[0] if len(passwords) == 1 else None
 
 @auth_basic.hash_password
@@ -75,7 +77,7 @@ def hash_pw(password):
 @auth_token.verify_token
 def verify_token(token):
     try:
-        g.user = serializer.loads(token)
+        g.username = serializer.loads(token)
         return True
     except:
         return False
@@ -95,9 +97,9 @@ class ExistingParticipantError(Exception):
 class Login(Resource):
     def post(self):
         username, password = [request.json[x] for x in ['username', 'password']]
-        passwords = get0('password', 'users where name=%r' % username)
+        passwords = get0('password', 'users where username=%r' % username)
         if len(passwords) == 1 and passwords[0] == sha256(password):
-            token = serializer.dumps({'username': username}).decode('utf8')
+            token = serializer.dumps(username).decode('utf8')
             return {"access_token": token}
         else:
             return None
@@ -107,7 +109,8 @@ class Users(Resource):
     @auth.login_required
     def get(self, user_id=None):
         if not user_id:
-            users = get('id,name,password,mail,web', 'users')
+            users = get('id,username,fullname,password,permissions,mail,web',
+                'users')
             return [strip(x) for x in users]
         else:
             return get_user(user_id)
@@ -195,7 +198,7 @@ class Projects(Resource):
 class Info(Resource):
     @auth.login_required
     def get(self):
-        uid = get0('id', 'users where name=%r' % g.user)[0]
+        uid = get0('id', 'users where username=%r' % g.username)[0]
         return get_user(uid)
 
 
@@ -218,7 +221,8 @@ def get0(what, where):
 
 def get_user(uid):
     "Return all the fields of a given user"
-    users = get('id,name,password,mail,web', 'users where id=%d' % uid)
+    users = get('id,username,fullname,password,permissions,mail,web',
+        'users where id=%d' % uid)
     if len(users) == 0:
         return {'message': 'error: unknown user id %d' % uid}, 409
 

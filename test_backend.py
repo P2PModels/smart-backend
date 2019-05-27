@@ -18,7 +18,7 @@ urlbase = 'http://localhost:5000/'
 def request(*args, **kwargs):
     "Return the json response from a url, accessed by basic authentication."
     mgr = req.HTTPPasswordMgrWithDefaultRealm()
-    mgr.add_password(None, urlbase, 'jordi', 'abc')
+    mgr.add_password(None, urlbase, 'jordibc', 'abc')
     opener = req.build_opener(req.HTTPBasicAuthHandler(mgr))
     headers = {'Content-Type': 'application/json'}
     r = req.Request(urlbase + args[0], *args[1:], **kwargs, headers=headers)
@@ -54,7 +54,8 @@ def add_test_user():
     except urllib.error.HTTPError as e:
         pass
 
-    data = jdumps({'id': 1000, 'name': 'test_user', 'password': 'booo'})
+    data = jdumps({'id': 1000, 'username': 'test_user',
+        'fullname': 'Random User', 'password': 'booo'})
     return post('users', data=data)
 
 
@@ -98,7 +99,7 @@ def test_auth_basic():
 
 
 def test_auth_bearer():
-    res = post('login', data=b'{"username": "jordi", "password": "abc"}')
+    res = post('login', data=b'{"username": "jordibc", "password": "abc"}')
     auth_txt = 'Bearer ' + res['access_token']
     r = req.Request(urlbase + 'users', headers={'Authorization': auth_txt})
     req.urlopen(r)
@@ -107,9 +108,10 @@ def test_auth_bearer():
 def test_get_users():
     res = get('users')
     assert type(res) == list
-    assert all(x in res[0] for x in 'id name password web mail'.split())
+    assert all(x in res[0] for x in
+        'id username fullname permissions password web mail'.split())
     assert res[0]['id'] == 1
-    assert res[0]['name'] == 'jordi'
+    assert res[0]['username'] == 'jordibc'
 
 
 def test_get_projects():
@@ -139,12 +141,12 @@ def test_add_del_project():
 
 def test_change_user():
     add_test_user()
-    assert get('users/1000')['name'] == 'test_user'
+    assert get('users/1000')['username'] == 'test_user'
 
-    res = put('users/1000', data=jdumps({'name': 'newman'}))
+    res = put('users/1000', data=jdumps({'username': 'newman'}))
     assert res['message'] == 'ok'
 
-    assert get('users/1000')['name'] == 'newman'
+    assert get('users/1000')['username'] == 'newman'
     del_test_user()
 
 
