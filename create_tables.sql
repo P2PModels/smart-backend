@@ -7,7 +7,7 @@ create table users (
     fullname text not null,
     password text not null,
     permissions text,
-    mail text,
+    email text not null unique,
     web text);
 
 drop table if exists projects;

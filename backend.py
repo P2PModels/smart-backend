@@ -6,7 +6,8 @@ to the world.
 """
 
 # TODO:
-#   * Add user permissions to see & change data (needs extra field in DB).
+#   * Use user permissions to see & change data.
+#   * Sanitize sql inputs.
 #   * Catch and process well all cases when request.json is empty or invalid.
 
 # We will take ideas for our api from
@@ -27,7 +28,7 @@ to the world.
 #   fullname: str
 #   password: str
 #   permissions: str
-#   mail: str
+#   email: str
 #   web: str
 #   profiles: list of str
 #   projects_created: list of projects
@@ -96,11 +97,22 @@ class ExistingParticipantError(Exception):
 
 class Login(Resource):
     def post(self):
-        username, password = [request.json[x] for x in ['username', 'password']]
-        passwords = get0('password', 'users where username=%r' % username)
-        if len(passwords) == 1 and passwords[0] == sha256(password):
-            token = serializer.dumps(username).decode('utf8')
-            return {"access_token": token}
+        uname = request.json['usernameOrEmail']
+        fields = 'id,username,password,email'
+
+        res = get(fields, 'users where username=%r' % uname)
+        if len(res) == 0:
+            res = get(fields, 'users where email=%r' % uname)
+            if len(res) == 0:
+                return None
+        r0 = res[0]
+
+        if r0['password'] == sha256(request.json['password']):
+            token = serializer.dumps(r0['username']).decode('utf8')
+            return {'id': r0['id'],
+                    'name': r0['username'],
+                    'email': r0['email'],
+                    'token': token}
         else:
             return None
 
@@ -109,7 +121,7 @@ class Users(Resource):
     @auth.login_required
     def get(self, user_id=None):
         if not user_id:
-            users = get('id,username,fullname,password,permissions,mail,web',
+            users = get('id,username,fullname,password,permissions,email,web',
                 'users')
             return [strip(x) for x in users]
         else:
@@ -221,7 +233,7 @@ def get0(what, where):
 
 def get_user(uid):
     "Return all the fields of a given user"
-    users = get('id,username,fullname,password,permissions,mail,web',
+    users = get('id,username,fullname,password,permissions,email,web',
         'users where id=%d' % uid)
     if len(users) == 0:
         return {'message': 'error: unknown user id %d' % uid}, 409

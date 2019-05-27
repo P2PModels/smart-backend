@@ -55,7 +55,7 @@ def add_test_user():
         pass
 
     data = jdumps({'id': 1000, 'username': 'test_user',
-        'fullname': 'Random User', 'password': 'booo'})
+        'fullname': 'Random User', 'password': 'booo', 'email': 'test@ucm.es'})
     return post('users', data=data)
 
 
@@ -99,8 +99,9 @@ def test_auth_basic():
 
 
 def test_auth_bearer():
-    res = post('login', data=b'{"username": "jordibc", "password": "abc"}')
-    auth_txt = 'Bearer ' + res['access_token']
+    data = jdumps({'usernameOrEmail': 'jordibc', 'password': 'abc'})
+    res = post('login', data=data)
+    auth_txt = 'Bearer ' + res['token']
     r = req.Request(urlbase + 'users', headers={'Authorization': auth_txt})
     req.urlopen(r)
 
@@ -109,7 +110,7 @@ def test_get_users():
     res = get('users')
     assert type(res) == list
     assert all(x in res[0] for x in
-        'id username fullname permissions password web mail'.split())
+        'id username fullname permissions password web email'.split())
     assert res[0]['id'] == 1
     assert res[0]['username'] == 'jordibc'
 
