@@ -22,7 +22,7 @@ def request(*args, **kwargs):
     opener = req.build_opener(req.HTTPBasicAuthHandler(mgr))
     headers = {'Content-Type': 'application/json'}
     r = req.Request(urlbase + args[0], *args[1:], **kwargs, headers=headers)
-    return json.loads(opener.open(r).read())
+    return json.loads(opener.open(r).read().decode('utf8'))
 
 
 def get(*args, **kwargs):
