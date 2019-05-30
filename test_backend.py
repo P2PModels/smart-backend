@@ -18,7 +18,7 @@ urlbase = 'http://localhost:5000/'
 def request(*args, **kwargs):
     "Return the json response from a url, accessed by basic authentication."
     mgr = req.HTTPPasswordMgrWithDefaultRealm()
-    mgr.add_password(None, urlbase, 'jordibc', 'abc')
+    mgr.add_password(None, urlbase, 'user1', 'abc')
     opener = req.build_opener(req.HTTPBasicAuthHandler(mgr))
     headers = {'Content-Type': 'application/json'}
     r = req.Request(urlbase + args[0], *args[1:], **kwargs, headers=headers)
@@ -107,8 +107,8 @@ def test_auth_bearer():
         r = req.Request(urlbase + 'users', headers={'Authorization': auth_txt})
         req.urlopen(r)
 
-    open_with_token('jordibc', 'abc')
-    open_with_token('jordi@ucm.es', 'abc')
+    open_with_token('user1', 'abc')
+    open_with_token('johnny@ucm.es', 'abc')
 
 
 def test_get_users():
@@ -117,7 +117,7 @@ def test_get_users():
     assert all(x in res[0] for x in
         'id username fullname permissions password web email'.split())
     assert res[0]['id'] == 1
-    assert res[0]['username'] == 'jordibc'
+    assert res[0]['username'] == 'user1'
 
 
 def test_get_projects():
@@ -167,16 +167,16 @@ def test_change_project():
     del_test_project()
 
 
-def test_add_del_participant():
+def test_add_del_participants():
     add_test_user()
     add_test_project()
 
-    res = put('projects/1000', data=jdumps({'addParticipant': 1000}))
+    res = put('projects/1000', data=jdumps({'addParticipants': [1000]}))
     assert res['message'] == 'ok'
 
     assert 1000 in get('projects/1000')['participants']
 
-    res = put('projects/1000', data=jdumps({'delParticipant': 1000}))
+    res = put('projects/1000', data=jdumps({'delParticipants': [1000]}))
     assert res['message'] == 'ok'
 
     del_test_project()

@@ -68,7 +68,7 @@ auth = MultiAuth(auth_basic, auth_token)
 @auth_basic.get_password
 def get_pw(username):
     g.username = username
-    passwords = get0('password', 'users where username=%r' % username)
+    passwords = dbget0('password', 'users where username=%r' % username)
     return passwords[0] if len(passwords) == 1 else None
 
 @auth_basic.hash_password
@@ -101,9 +101,9 @@ class Login(Resource):
         name = request.json['usernameOrEmail']
         fields = 'id,username,password,email'
 
-        res = get(fields, 'users where username=%r' % name)
+        res = dbget(fields, 'users where username=%r' % name)
         if len(res) == 0:
-            res = get(fields, 'users where email=%r' % name)
+            res = dbget(fields, 'users where email=%r' % name)
             if len(res) == 0:
                 return None
         r0 = res[0]
@@ -123,7 +123,7 @@ class Users(Resource):
     def get(self, user_id=None):
         "Return info about the user (or all users if no id given)"
         if user_id is None:
-            users = get('id,username,fullname,password,permissions,email,web',
+            users = dbget('id,username,fullname,password,permissions,email,web',
                 'users')
             return [strip(x) for x in users]
         else:
@@ -160,7 +160,7 @@ class Users(Resource):
         exe('delete from user_created_projects where id_user=%d' % user_id)
         exe('delete from user_joined_projects where id_user=%d' % user_id)
 
-        for pid in get0('id', 'projects where creator=%d' % user_id):
+        for pid in dbget0('id', 'projects where creator=%d' % user_id):
             del_project(pid)
         # NOTE: we could insted move them to a list of orphaned projects.
 
@@ -172,7 +172,7 @@ class Projects(Resource):
     def get(self, project_id=None):
         "Return info about the project (or all projects if no id given)"
         if project_id is None:
-            projects = get(
+            projects = dbget(
                 'id,creator,title,subtitle,description,url,img_bg,img1,img2',
                 'projects')
             return [strip(x) for x in projects]
@@ -191,8 +191,8 @@ class Projects(Resource):
     @auth.login_required
     def put(self, project_id):
         "Modify project"
-        add_participant(project_id, request.json.pop('addParticipant', None))
-        del_participant(project_id, request.json.pop('delParticipant', None))
+        add_participants(project_id, request.json.pop('addParticipants', None))
+        del_participants(project_id, request.json.pop('delParticipants', None))
         if not request.json:
             return {'message': 'ok'}
         kvs = ','.join('%r=%r' % k_v for k_v in request.json.items())
@@ -205,7 +205,7 @@ class Projects(Resource):
     @auth.login_required
     def delete(self, project_id):
         "Delete project and all references to it"
-        ids = get0('id', 'projects where id=%d' % project_id)
+        ids = dbget0('id', 'projects where id=%d' % project_id)
         if len(ids) != 1:
             return {'message': 'error: unknown project id %d' % project_id}, 409
         del_project(project_id)
@@ -216,45 +216,50 @@ class Info(Resource):
     @auth.login_required
     def get(self):
         "Return info about the currently logged user"
-        uid = get0('id', 'users where username=%r' % g.username)[0]
+        uid = dbget0('id', 'users where username=%r' % g.username)[0]
         return get_user(uid)
 
 
 # Auxiliary functions.
 
-def dbexe(command):
-    return db.connect().execute(command)
+def dbexe(command, conn=None):
+    conn = conn or db.connect()
+    return conn.execute(command)
 
 
-def get(what, where):
+def dbcount(where, conn=None):
+    return dbexe('select count(*) from %s' % where, conn).fetchone()[0]
+
+
+def dbget(what, where, conn=None):
     "Return result of the query 'select what from where' as a list of dicts"
-    res = dbexe('select %s from %s' % (what, where)).fetchall()
+    res = dbexe('select %s from %s' % (what, where), conn).fetchall()
     return [dict(zip(what.split(','), x)) for x in res]
 
 
-def get0(what, where):
+def dbget0(what, where, conn=None):
     "Return a list of the single column of values from get()"
     assert ',' not in what, 'Use this function to select a single column only'
-    return [x[what] for x in get(what, where)]
+    return [x[what] for x in dbget(what, where, conn)]
 
 
 def get_user(uid):
     "Return all the fields of a given user"
-    users = get('id,username,fullname,password,permissions,email,web',
+    users = dbget('id,username,fullname,password,permissions,email,web',
         'users where id=%d' % uid)
     if len(users) == 0:
         return {'message': 'error: unknown user id %d' % uid}, 409
 
     user = users[0]
 
-    user['profiles'] = get0('profile_name',
+    user['profiles'] = dbget0('profile_name',
         'profiles where id in '
             '(select id_profile from user_profiles where id_user=%d)' % uid)
 
-    user['projects_created'] = get0('id_project',
+    user['projects_created'] = dbget0('id_project',
         'user_created_projects where id_user=%d' % uid)
 
-    user['projects_joined'] = get0('id_project',
+    user['projects_joined'] = dbget0('id_project',
         'user_joined_projects where id_user=%d' % uid)
 
     return strip(user)
@@ -262,7 +267,7 @@ def get_user(uid):
 
 def get_project(pid):
     "Return all the fields of a given project"
-    projects = get(
+    projects = dbget(
         'id,creator,title,subtitle,description,url,img_bg,img1,img2',
         'projects where id=%d' % pid)
     if len(projects) == 0:
@@ -270,10 +275,10 @@ def get_project(pid):
 
     project = projects[0]
 
-    project['participants'] = get0('id_user',
+    project['participants'] = dbget0('id_user',
         'user_joined_projects where id_project=%d' % pid)
 
-    project['requested_profiles'] = get0('profile_name',
+    project['requested_profiles'] = dbget0('profile_name',
         'profiles where id in '
         '  (select id_profile from project_requested_profiles '
         '   where id_project=%d)' % pid)
@@ -299,28 +304,35 @@ def strip(d):
     return d_stripped
 
 
-def add_participant(pid, uid):
-    "Add a participant (with user id uid) to a project (pid)"
-    if uid is None:
+def add_participants(pid, uids):
+    "Add participants (with user id in uids) to a project (pid)"
+    if not uids:
         return
-    participants_existing = get0('id_user',
-        'user_joined_projects where id_project=%d' % pid)
-    if uid in participants_existing:
+    uids_str = '(%s)' % ','.join('%d' % x for x in uids)  # -> '(u1, u2, ...)'
+
+    if dbcount('users where id in %s' % uids_str) != len(uids):
+        raise NonexistingUserError
+    if dbcount('user_joined_projects '
+        'where id_project=%d and id_user in %s' % (pid, uids_str)) != 0:
         raise ExistingParticipantError
-    if len(get('id', 'users where id=%d' % uid)) == 0:
-        raise NonexistingUserError
+
+    values = ','.join('(%d, %d)' % (uid, pid) for uid in uids)
     dbexe('insert into user_joined_projects (id_user, id_project) '
-        'values (%d, %d)' % (uid, pid))
+        'values %s' % values)
 
 
-def del_participant(pid, uid):
-    "Remove a participant (with user id uid) from a project (pid)"
-    if uid is None:
+def del_participants(pid, uids):
+    "Remove participants (with user id in uids) from a project (pid)"
+    if not uids:
         return
-    res = dbexe('delete from user_joined_projects where '
-        'id_user=%d and id_project=%d' % (uid, pid))
-    if res.rowcount != 1:
+    uids_str = '(%s)' % ','.join('%d' % x for x in uids)  # -> '(u1, u2, ...)'
+
+    if dbcount('user_joined_projects '
+        'where id_project=%d and id_user in %s' % (pid, uids_str)) != len(uids):
         raise NonexistingUserError
+
+    dbexe('delete from user_joined_projects where '
+        'id_user in %s and id_project=%d' % (uids_str, pid))
 
 
 def sha256(txt):
