@@ -9,6 +9,8 @@ to the world.
 #   * Use user permissions to see & change data.
 #   * Sanitize sql inputs.
 #   * Catch and process well all cases when request.json is empty or invalid.
+#   * Maybe reuse the connection when there are several db* calls at once.
+#   * Maybe use context managers to close cleanly the connections.
 
 # We will take ideas for our api from
 # https://docs.dhis2.org/master/en/developer/html/webapi.html
