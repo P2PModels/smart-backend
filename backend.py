@@ -59,7 +59,7 @@ db = None  # call initialize() to fill this up
 serializer = None
 
 
-# Set up the authentication (see https://flask-httpauth.readthedocs.io/)
+# Set up the authentication (see https://flask-httpauth.readthedocs.io/).
 
 auth_basic = HTTPBasicAuth()
 auth_token = HTTPTokenAuth('Bearer')
@@ -294,7 +294,7 @@ def strip(d):
 
 
 def add_participant(pid, uid):
-    "Add a paticipant into a project"
+    "Add a participant to a project"
     participants_existing = get0('id_user',
         'user_joined_projects where id_project=%d' % pid)
     if uid in participants_existing:
