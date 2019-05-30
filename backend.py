@@ -228,7 +228,7 @@ def get(what, where):
 
 
 def get0(what, where):
-    "Return a list of the selected elements from get()"
+    "Return a list of the single selected elements from get()"
     return [x[what] for x in get(what, where)]
 
 
@@ -324,37 +324,43 @@ def initialize(db_name='smart.db', secret_key='top secret'):
     global db, serializer
     db = sqlalchemy.create_engine('sqlite:///%s' % db_name)
     app = Flask(__name__)
-
     app.config['SECRET_KEY'] = secret_key
     serializer = JSONSigSerializer(app.config['SECRET_KEY'], expires_in=3600)
-
-    errors = {
-        'ExistingParticipantError': {
-            'status': 400,
-            'message': 'existing_participant',
-            'description': 'Tried to add an already existing participant.'},
-        'NonexistingUserError': {
-            'status': 400,
-            'message': 'nonexisting_user',
-            'description': 'Referenced a nonexisting user.'},
-        'IntegrityError': {
-            'status': 400,
-            'message': 'bad_request',
-            'description': 'Our database did not like that.'},
-        'OperationalError': {
-            'status': 400,
-            'message': 'bad_field',
-            'description': 'Seems you used a nonexisting field.'},
-        'KeyError': {
-            'status': 400,
-            'message': 'missing_field',
-            'description': 'Seems you forgot something in your request.'}}
-    api = Api(app, errors=errors)
-    api.add_resource(Login, '/login')
-    api.add_resource(Users, '/users', '/users/<int:user_id>')
-    api.add_resource(Projects, '/projects', '/projects/<int:project_id>')
-    api.add_resource(Info, '/info')
+    api = Api(app, errors=error_messages)
+    add_resources(api)
     return app
+
+
+error_messages = {  # sent on different exceptions
+    'ExistingParticipantError': {
+        'status': 400,
+        'message': 'existing_participant',
+        'description': 'Tried to add an already existing participant.'},
+    'NonexistingUserError': {
+        'status': 400,
+        'message': 'nonexisting_user',
+        'description': 'Referenced a nonexisting user.'},
+    'IntegrityError': {
+        'status': 400,
+        'message': 'bad_request',
+        'description': 'Our database did not like that.'},
+    'OperationalError': {
+        'status': 400,
+        'message': 'bad_field',
+        'description': 'Seems you used a nonexisting field.'},
+    'KeyError': {
+        'status': 400,
+        'message': 'missing_field',
+        'description': 'Seems you forgot something in your request.'}}
+
+
+def add_resources(api):
+    "Add all the REST endpoints"
+    add = api.add_resource  # shortcut
+    add(Login, '/login')
+    add(Users, '/users', '/users/<int:user_id>')
+    add(Projects, '/projects', '/projects/<int:project_id>')
+    add(Info, '/info')
 
 
 
