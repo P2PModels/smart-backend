@@ -99,11 +99,16 @@ def test_auth_basic():
 
 
 def test_auth_bearer():
-    data = jdumps({'usernameOrEmail': 'jordibc', 'password': 'abc'})
-    res = post('login', data=data)
-    auth_txt = 'Bearer ' + res['token']
-    r = req.Request(urlbase + 'users', headers={'Authorization': auth_txt})
-    req.urlopen(r)
+    def open_with_token(usernameOrEmail, password):
+        data = jdumps({'usernameOrEmail': usernameOrEmail,
+                       'password': password})
+        res = post('login', data=data)
+        auth_txt = 'Bearer ' + res['token']
+        r = req.Request(urlbase + 'users', headers={'Authorization': auth_txt})
+        req.urlopen(r)
+
+    open_with_token('jordibc', 'abc')
+    open_with_token('jordi@ucm.es', 'abc')
 
 
 def test_get_users():
