@@ -73,7 +73,7 @@ def get_pw(username):
 
 @auth_basic.hash_password
 def hash_pw(password):
-    return sha256(password)
+    return sha256(password)  # we keep our passwords encrypted (hashed)
 
 @auth_token.verify_token
 def verify_token(token):
@@ -97,12 +97,13 @@ class ExistingParticipantError(Exception):
 
 class Login(Resource):
     def post(self):
-        uname = request.json['usernameOrEmail']
+        "Return info about the user if successfully logged, None otherwise"
+        name = request.json['usernameOrEmail']
         fields = 'id,username,password,email'
 
-        res = get(fields, 'users where username=%r' % uname)
+        res = get(fields, 'users where username=%r' % name)
         if len(res) == 0:
-            res = get(fields, 'users where email=%r' % uname)
+            res = get(fields, 'users where email=%r' % name)
             if len(res) == 0:
                 return None
         r0 = res[0]
@@ -120,7 +121,8 @@ class Login(Resource):
 class Users(Resource):
     @auth.login_required
     def get(self, user_id=None):
-        if not user_id:
+        "Return info about the user (or all users if no id given)"
+        if user_id is None:
             users = get('id,username,fullname,password,permissions,email,web',
                 'users')
             return [strip(x) for x in users]
@@ -129,6 +131,7 @@ class Users(Resource):
 
     @auth.login_required
     def post(self):
+        "Add user"
         if not request.json:
             raise KeyError
         cols, vals = zip(*request.json.items())
@@ -137,6 +140,7 @@ class Users(Resource):
 
     @auth.login_required
     def put(self, user_id):
+        "Modify user"
         kvs = ','.join('%r=%r' % k_v for k_v in request.json.items())
         res = dbexe('update users set %s where id=%d' % (kvs, user_id))
         if res.rowcount == 1:
@@ -146,6 +150,7 @@ class Users(Resource):
 
     @auth.login_required
     def delete(self, user_id):
+        "Delete user and all references to her"
         exe = db.connect().execute
         res = exe('delete from users where id=%d' % user_id)
         if res.rowcount != 1:
@@ -157,6 +162,7 @@ class Users(Resource):
 
         for pid in get0('id', 'projects where creator=%d' % user_id):
             del_project(pid)
+        # NOTE: we could insted move them to a list of orphaned projects.
 
         return {'message': 'ok'}
 
@@ -164,7 +170,8 @@ class Users(Resource):
 class Projects(Resource):
     @auth.login_required
     def get(self, project_id=None):
-        if not project_id:
+        "Return info about the project (or all projects if no id given)"
+        if project_id is None:
             projects = get(
                 'id,creator,title,subtitle,description,url,img_bg,img1,img2',
                 'projects')
@@ -174,6 +181,7 @@ class Projects(Resource):
 
     @auth.login_required
     def post(self):
+        "Add project"
         if not request.json:
             raise KeyError
         cols, vals = zip(*request.json.items())
@@ -182,16 +190,11 @@ class Projects(Resource):
 
     @auth.login_required
     def put(self, project_id):
-        # This part may not be very RESTful...
-        if 'addParticipant' in request.json:
-            add_participant(project_id, request.json['addParticipant'])
-            request.json.pop('addParticipant')
-        if 'delParticipant' in request.json:
-            remove_participant(project_id, request.json['delParticipant'])
-            request.json.pop('delParticipant')
+        "Modify project"
+        add_participant(project_id, request.json.pop('addParticipant', None))
+        del_participant(project_id, request.json.pop('delParticipant', None))
         if not request.json:
             return {'message': 'ok'}
-
         kvs = ','.join('%r=%r' % k_v for k_v in request.json.items())
         res = dbexe('update projects set %s where id=%d' % (kvs, project_id))
         if res.rowcount == 1:
@@ -201,6 +204,7 @@ class Projects(Resource):
 
     @auth.login_required
     def delete(self, project_id):
+        "Delete project and all references to it"
         ids = get0('id', 'projects where id=%d' % project_id)
         if len(ids) != 1:
             return {'message': 'error: unknown project id %d' % project_id}, 409
@@ -211,6 +215,7 @@ class Projects(Resource):
 class Info(Resource):
     @auth.login_required
     def get(self):
+        "Return info about the currently logged user"
         uid = get0('id', 'users where username=%r' % g.username)[0]
         return get_user(uid)
 
@@ -222,13 +227,14 @@ def dbexe(command):
 
 
 def get(what, where):
-    "Return result of the query 'select what from where' as a dict"
+    "Return result of the query 'select what from where' as a list of dicts"
     res = dbexe('select %s from %s' % (what, where)).fetchall()
     return [dict(zip(what.split(','), x)) for x in res]
 
 
 def get0(what, where):
-    "Return a list of the single selected elements from get()"
+    "Return a list of the single column of values from get()"
+    assert ',' not in what, 'Use this function to select a single column only'
     return [x[what] for x in get(what, where)]
 
 
@@ -294,7 +300,9 @@ def strip(d):
 
 
 def add_participant(pid, uid):
-    "Add a participant to a project"
+    "Add a participant (with user id uid) to a project (pid)"
+    if uid is None:
+        return
     participants_existing = get0('id_user',
         'user_joined_projects where id_project=%d' % pid)
     if uid in participants_existing:
@@ -305,8 +313,10 @@ def add_participant(pid, uid):
         'values (%d, %d)' % (uid, pid))
 
 
-def remove_participant(pid, uid):
-    "Remove a participant from a project"
+def del_participant(pid, uid):
+    "Remove a participant (with user id uid) from a project (pid)"
+    if uid is None:
+        return
     res = dbexe('delete from user_joined_projects where '
         'id_user=%d and id_project=%d' % (uid, pid))
     if res.rowcount != 1:
