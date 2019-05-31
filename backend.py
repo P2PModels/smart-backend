@@ -388,6 +388,8 @@ def add_resources(api):
 
 
 
-if __name__ == '__main__':
-    app = initialize()
-    app.run()
+app = initialize()
+# If we want to run it from the console, we can then run:
+#   app.run()
+# but it's better if we serve it with something like
+#   gunicorn backend:app
