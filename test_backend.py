@@ -68,7 +68,7 @@ def add_test_project():
     except urllib.error.HTTPError as e:
         pass
 
-    data = jdumps({'id': 1000, 'creator': 1, 'title': 'Test project'})
+    data = jdumps({'id': 1000, 'organizer': 1, 'name': 'Test project'})
     return post('projects', data=data)
 
 
@@ -121,10 +121,10 @@ def test_get_users():
 def test_get_projects():
     res = get('projects')
     assert type(res) == list
-    keys = 'id creator title subtitle description url img_bg img1 img2'.split()
+    keys = 'id organizer name summary description url img_bg img1 img2'.split()
     assert all(x in res[0] for x in keys)
     assert res[0]['id'] == 1
-    assert res[0]['creator'] == 1
+    assert res[0]['organizer'] == 1
 
 
 def test_add_del_user():
@@ -157,12 +157,12 @@ def test_change_user():
 
 def test_change_project():
     add_test_project()
-    assert get('projects/1000')['title'] == 'Test project'
+    assert get('projects/1000')['name'] == 'Test project'
 
-    res = put('projects/1000', data=jdumps({'title': 'changed'}))
+    res = put('projects/1000', data=jdumps({'name': 'changed'}))
     assert res['message'] == 'ok'
 
-    assert get('projects/1000')['title'] == 'changed'
+    assert get('projects/1000')['name'] == 'changed'
     del_test_project()
 
 

@@ -29,11 +29,11 @@ insert into user_profiles values  -- id_user, id_profile
     (3, 2), (3, 3), (3, 4);
 
 insert into projects values
-    (1, 1, 'Superproject', 'A new and shiny project', 'This project does blah blah.',
+    (1, 1, 'Superproject', 'A new and shiny project', 'This project does blah blah.', 'We need...',
     'https://project1.org', 'img_bg', 'img1.png', 'img2.png'),
-    (2, 1, 'Project Meh', 'A new but crappy project', 'This project does not much.',
+    (2, 1, 'Project Meh', 'A new but crappy project', 'This project does not much.', 'We need...',
     'https://project2.org', 'img_bg', 'img1.png', 'img2.png'),
-    (3, 2, 'Frontend', 'What will be shown', 'This project...',
+    (3, 2, 'Frontend', 'What will be shown', 'This project...', 'We need...',
     'https://project3.org', '1.png', '2.png', '3.jpg');
 
 insert into user_created_projects values  -- id_user, id_project

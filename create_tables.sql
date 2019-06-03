@@ -12,11 +12,12 @@ create table users (
 
 drop table if exists projects;
 create table projects (
-    id integer primary key not null,
-    creator integer not null,
-    title text not null,
-    subtitle text,
+    id integer primary key autoincrement,
+    organizer integer not null,
+    name text not null,
+    summary text,
     description text,
+    needs text,
     url text,
     img_bg text,
     img1 text,

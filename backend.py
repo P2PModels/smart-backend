@@ -38,10 +38,11 @@ REST call examples:
 #
 # project
 #   id: int
-#   creator: int
-#   title: str
-#   subtitle: str
+#   organizer: int
+#   name: str
+#   summary: str
 #   description: str
+#   needs: str
 #   url: str
 #   img_bg: str
 #   img1: str
@@ -172,7 +173,7 @@ class Users(Resource):
         exe('delete from user_created_projects where id_user=%d' % user_id)
         exe('delete from user_joined_projects where id_user=%d' % user_id)
 
-        for pid in dbget0('id', 'projects where creator=%d' % user_id):
+        for pid in dbget0('id', 'projects where organizer=%d' % user_id):
             del_project(pid)
         # NOTE: we could insted move them to a list of orphaned projects.
 
@@ -285,7 +286,7 @@ def get_user(uid):
 def get_project(pid):
     "Return all the fields of a given project"
     projects = dbget(
-        'id,creator,title,subtitle,description,url,img_bg,img1,img2',
+        'id,organizer,name,summary,description,needs,url,img_bg,img1,img2',
         'projects where id=%d' % pid)
     if len(projects) == 0:
         return {'message': 'error: unknown project id %d' % pid}, 409
