@@ -127,7 +127,7 @@ class Users(Resource):
     def get(self, user_id=None):
         "Return info about the user (or all users if no id given)"
         if user_id is None:
-            return [get_user(uid) for uid in dbget0('id', 'users')]
+            return [get_user(uid) for uid in sorted(dbget0('id', 'users'))]
         else:
             return get_user(user_id)
 
@@ -264,7 +264,7 @@ def dbget0(what, where, conn=None):
 
 def get_user(uid):
     "Return all the fields of a given user"
-    users = dbget('id,username,name,password,permissions,email,web',
+    users = dbget('id,username,name,permissions,email,web',
         'users where id=%d' % uid)
     if len(users) == 0:
         return {'message': 'error: unknown user id %d' % uid}, 409
