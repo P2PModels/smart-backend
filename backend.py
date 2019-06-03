@@ -126,9 +126,7 @@ class Users(Resource):
     def get(self, user_id=None):
         "Return info about the user (or all users if no id given)"
         if user_id is None:
-            users = dbget('id,username,name,password,permissions,email,web',
-                'users')
-            return [strip(x) for x in users]
+            return [get_user(uid) for uid in dbget0('id', 'users')]
         else:
             return get_user(user_id)
 
@@ -185,10 +183,7 @@ class Projects(Resource):
     def get(self, project_id=None):
         "Return info about the project (or all projects if no id given)"
         if project_id is None:
-            projects = dbget(
-                'id,creator,title,subtitle,description,url,img_bg,img1,img2',
-                'projects')
-            return [strip(x) for x in projects]
+            return [get_project(pid) for pid in dbget0('id', 'projects')]
         else:
             return get_project(project_id)
 
