@@ -50,6 +50,7 @@ to the world.
 #   requested_profiles: list of str
 
 
+import os
 import hashlib
 from flask import Flask, request, g
 from flask_httpauth import HTTPBasicAuth, HTTPTokenAuth, MultiAuth
@@ -101,7 +102,7 @@ class Login(Resource):
     def post(self):
         "Return info about the user if successfully logged, None otherwise"
         name = request.json['usernameOrEmail']
-        fields = 'id,username,password,email'
+        fields = 'id,username,fullname,password,email'
 
         res = dbget(fields, 'users where username=%r' % name)
         if len(res) == 0:
@@ -113,7 +114,7 @@ class Login(Resource):
         if r0['password'] == sha256(request.json['password']):
             token = serializer.dumps(r0['username']).decode('utf8')
             return {'id': r0['id'],
-                    'name': r0['username'],
+                    'name': r0['fullname'],
                     'email': r0['email'],
                     'token': token}
         else:
@@ -343,12 +344,12 @@ def sha256(txt):
 
 # App initialization.
 
-def initialize(db_name='smart.db', secret_key='top secret'):
+def initialize(db_name='smart.db'):
     "Initialize the database and the flask app"
     global db, serializer
     db = sqlalchemy.create_engine('sqlite:///%s' % db_name)
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = secret_key
+    app.config['SECRET_KEY'] = os.urandom(256)
     serializer = JSONSigSerializer(app.config['SECRET_KEY'], expires_in=3600)
     api = Api(app, errors=error_messages)
     add_resources(api)
