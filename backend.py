@@ -3,6 +3,13 @@
 """
 Keep the data of users and projects, and present a REST api to talk
 to the world.
+
+REST call examples:
+  GET    /users       Get all users
+  GET    /users/{id}  Get the user information identified by "id"
+  POST   /users       Create a new user
+  PUT    /users/{id}  Update the user information identified by "id"
+  DELETE /users/{id}  Delete user by "id"
 """
 
 # TODO:
@@ -15,19 +22,12 @@ to the world.
 # We will take ideas for our api from
 # https://docs.dhis2.org/master/en/developer/html/webapi.html
 
-# REST call examples:
-#   GET    /users       Get all users
-#   GET    /users/{id}  Get the user information identified by "id"
-#   POST   /users       Create a new user
-#   PUT    /users/{id}  Update the user information identified by "id"
-#   DELETE /users/{id}  Delete user by "id"
-
 # The structure that we want to follow is:
 #
 # user
 #   id: int
 #   username: str
-#   fullname: str
+#   name: str
 #   password: str
 #   permissions: str
 #   email: str
@@ -55,6 +55,7 @@ import hashlib
 from flask import Flask, request, g
 from flask_httpauth import HTTPBasicAuth, HTTPTokenAuth, MultiAuth
 from flask_restful import Resource, Api
+from flask_cors import CORS
 import sqlalchemy
 from itsdangerous import TimedJSONWebSignatureSerializer as JSONSigSerializer
 
@@ -102,7 +103,7 @@ class Login(Resource):
     def post(self):
         "Return info about the user if successfully logged, None otherwise"
         name = request.json['usernameOrEmail']
-        fields = 'id,username,fullname,password,email'
+        fields = 'id,username,name,password,email'
 
         res = dbget(fields, 'users where username=%r' % name)
         if len(res) == 0:
@@ -114,7 +115,7 @@ class Login(Resource):
         if r0['password'] == sha256(request.json['password']):
             token = serializer.dumps(r0['username']).decode('utf8')
             return {'id': r0['id'],
-                    'name': r0['fullname'],
+                    'name': r0['name'],
                     'email': r0['email'],
                     'token': token}
         else:
@@ -126,18 +127,29 @@ class Users(Resource):
     def get(self, user_id=None):
         "Return info about the user (or all users if no id given)"
         if user_id is None:
-            users = dbget('id,username,fullname,password,permissions,email,web',
+            users = dbget('id,username,name,password,permissions,email,web',
                 'users')
             return [strip(x) for x in users]
         else:
             return get_user(user_id)
 
-    @auth.login_required
     def post(self):
         "Add user"
         if not request.json:
             raise KeyError
+        cols_required = ['email', 'password']
+        cols_valid = ['username', 'name', 'password', 'email', 'web']
+
+        if any(x not in request.json for x in cols_required):
+            return {'status': 400, 'message': 'user_missing_required',
+                'description': 'User must have the fields %s' % cols_required}
+        if not all(x in cols_valid for x in request.json):
+            return {'status': 400, 'message': 'bad_entry',
+                'description': 'User can only have the fields %s' % cols_valid}
+
+        request.json['password'] = sha256(request.json['password'])
         cols, vals = zip(*request.json.items())
+        # permissions_default = '---------'  ###
         dbexe('insert into users %r values %r' % (cols, vals))
         return {'message': 'ok'}
 
@@ -223,6 +235,15 @@ class Info(Resource):
         return get_user(uid)
 
 
+class Id(Resource):
+    def get(self, username):
+        uids = dbget0('id', 'users where username=%r' % username)
+        if not uids:
+            return {'message': 'error: unknown username %r' % username}
+        return {'id': uids[0]}
+
+
+
 # Auxiliary functions.
 
 def dbexe(command, conn=None):
@@ -248,7 +269,7 @@ def dbget0(what, where, conn=None):
 
 def get_user(uid):
     "Return all the fields of a given user"
-    users = dbget('id,username,fullname,password,permissions,email,web',
+    users = dbget('id,username,name,password,permissions,email,web',
         'users where id=%d' % uid)
     if len(users) == 0:
         return {'message': 'error: unknown user id %d' % uid}, 409
@@ -349,10 +370,18 @@ def initialize(db_name='smart.db'):
     global db, serializer
     db = sqlalchemy.create_engine('sqlite:///%s' % db_name)
     app = Flask(__name__)
+    CORS(app)
+
     app.config['SECRET_KEY'] = os.urandom(256)
     serializer = JSONSigSerializer(app.config['SECRET_KEY'], expires_in=3600)
+
     api = Api(app, errors=error_messages)
     add_resources(api)
+
+    @app.route('/')
+    def description():
+        return '<pre>' + __doc__ + '</pre>'
+
     return app
 
 
@@ -386,6 +415,7 @@ def add_resources(api):
     add(Users, '/users', '/users/<int:user_id>')
     add(Projects, '/projects', '/projects/<int:project_id>')
     add(Info, '/info')
+    add(Id, '/id/<username>')
 
 
 

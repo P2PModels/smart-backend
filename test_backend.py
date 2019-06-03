@@ -48,19 +48,17 @@ def jdumps(obj):
 
 
 def add_test_user():
-    try:
-        get('users/1000')
+    if 'id' in get('id/test_user'):
         raise Exception('User with id 1000 already exists.')
-    except urllib.error.HTTPError as e:
-        pass
 
-    data = jdumps({'id': 1000, 'username': 'test_user',
-        'fullname': 'Random User', 'password': 'booo', 'email': 'test@ucm.es'})
+    data = jdumps({'username': 'test_user',
+        'name': 'Random User', 'password': 'booo', 'email': 'test@ucm.es'})
     return post('users', data=data)
 
 
 def del_test_user():
-    return delete('users/1000')
+    uid = get('id/test_user')['id']
+    return delete('users/%s' % uid)
 
 
 def add_test_project():
@@ -115,7 +113,7 @@ def test_get_users():
     res = get('users')
     assert type(res) == list
     assert all(x in res[0] for x in
-        'id username fullname permissions password web email'.split())
+        'id username name permissions password web email'.split())
     assert res[0]['id'] == 1
     assert res[0]['username'] == 'user1'
 
@@ -147,12 +145,13 @@ def test_add_del_project():
 
 def test_change_user():
     add_test_user()
-    assert get('users/1000')['username'] == 'test_user'
+    uid = get('id/test_user')['id']
+    assert get('users/%s' % uid)['name'] == 'Random User'
 
-    res = put('users/1000', data=jdumps({'username': 'newman'}))
+    res = put('users/%s' % uid, data=jdumps({'name': 'Newman'}))
     assert res['message'] == 'ok'
 
-    assert get('users/1000')['username'] == 'newman'
+    assert get('users/%s' % uid)['name'] == 'Newman'
     del_test_user()
 
 
@@ -169,14 +168,15 @@ def test_change_project():
 
 def test_add_del_participants():
     add_test_user()
+    uid = get('id/test_user')['id']
     add_test_project()
 
-    res = put('projects/1000', data=jdumps({'addParticipants': [1000]}))
+    res = put('projects/1000', data=jdumps({'addParticipants': [uid]}))
     assert res['message'] == 'ok'
 
-    assert 1000 in get('projects/1000')['participants']
+    assert uid in get('projects/1000')['participants']
 
-    res = put('projects/1000', data=jdumps({'delParticipants': [1000]}))
+    res = put('projects/1000', data=jdumps({'delParticipants': [uid]}))
     assert res['message'] == 'ok'
 
     del_test_project()
