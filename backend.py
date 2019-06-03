@@ -123,7 +123,6 @@ class Login(Resource):
 
 
 class Users(Resource):
-    @auth.login_required
     def get(self, user_id=None):
         "Return info about the user (or all users if no id given)"
         if user_id is None:
@@ -137,7 +136,7 @@ class Users(Resource):
         "Add user"
         if not request.json:
             raise KeyError
-        cols_required = ['email', 'password']
+        cols_required = ['email', 'username', 'password']
         cols_valid = ['username', 'name', 'password', 'email', 'web']
 
         if any(x not in request.json for x in cols_required):
@@ -183,7 +182,6 @@ class Users(Resource):
 
 
 class Projects(Resource):
-    @auth.login_required
     def get(self, project_id=None):
         "Return info about the project (or all projects if no id given)"
         if project_id is None:
