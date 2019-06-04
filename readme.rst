@@ -6,15 +6,15 @@ To start playing with a local sqlite database::
 
 Example tests::
 
-  curl -H "Content-Type: application/json" -X DELETE -u jordibc:abc \
-    -w '\nReturn code: %{http_code}\n' http://localhost:5000/users/3
+  curl -H "Content-Type: application/json" -X DELETE -u user1:abc \
+    -w '\nReturn code: %{http_code}\n' http://localhost:5000/users/1
 
-  curl -H "Content-Type: application/json" -X POST -u jordibc:abc \
-    -d'{"id": 6, "creator": 1, "title":"boo"}' \
+  curl -H "Content-Type: application/json" -X POST -u user1:abc \
+    -d'{"id": 6, "name": "x1", "summary": "x2", "needs": "x3", "description": "x4"}' \
     -w '\nReturn code: %{http_code}\n' http://localhost:5000/projects
 
   curl -H "Content-Type: application/json" -X POST \
-    -d '{"username": "jordibc", "password": "abc"}' \
+    -d '{"username": "user1", "password": "abc"}' \
     -w '\nReturn code: %{http_code}\n' http://localhost:5000/login
 
 

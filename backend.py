@@ -62,8 +62,8 @@ from flask_cors import CORS
 import sqlalchemy
 from itsdangerous import TimedJSONWebSignatureSerializer as JSONSigSerializer
 
-db = None  # call initialize() to fill this up
-serializer = None
+db = None  # call initialize() to fill these up
+serializer = None  # this one is used for the token auth
 
 
 # Set up the authentication (see https://flask-httpauth.readthedocs.io/).
