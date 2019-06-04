@@ -416,7 +416,8 @@ def initialize(db_name='smart.db'):
 
     @app.route('/')
     def description():
-        return '<pre>' + __doc__ + '</pre>'
+        return ('<html>\n<head>\n<title>Description</title>\n</head>\n'
+            '<body>\n<pre>' + __doc__ + '</pre>\n</body>\n</html>')
 
     return app
 
