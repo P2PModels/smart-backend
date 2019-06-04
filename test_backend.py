@@ -56,8 +56,11 @@ def test_user():
 
 
 def add_test_user():
-    if 'id' in get('id/test_user'):
+    try:
+        get('id/test_user')
         raise Exception('test_user already exists.')
+    except urllib.error.HTTPError as e:
+        pass
 
     data = jdumps({'username': 'test_user',
         'name': 'Random User', 'password': 'booo', 'email': 'test@ucm.es'})

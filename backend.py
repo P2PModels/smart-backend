@@ -138,11 +138,11 @@ class Users(Resource):
         cols_valid = cols_required + ['username', 'name', 'web']
 
         if any(x not in data for x in cols_required):
-            return {'status': 400, 'message': 'user_missing_required',
-                'description': 'Must have the fields %s' % cols_required}
+            return {'message': 'user_missing_required',
+                'description': 'Must have the fields %s' % cols_required}, 400
         if not all(x in cols_valid for x in data):
-            return {'status': 400, 'message': 'bad_entry',
-                'description': 'Can only have the fields %s' % cols_valid}
+            return {'message': 'bad_entry',
+                'description': 'Can only have the fields %s' % cols_valid}, 400
 
         data.setdefault('username', data['email'])  # username = email
         data['password'] = generate_password_hash(data['password'])
@@ -209,11 +209,11 @@ class Projects(Resource):
         cols_valid = cols_required + ['url', 'img_bg', 'img1', 'img2']
 
         if any(x not in data for x in cols_required):
-            return {'status': 400, 'message': 'project_missing_required',
-                'description': 'Must have the fields %s' % cols_required}
+            return {'message': 'project_missing_required',
+                'description': 'Must have the fields %s' % cols_required}, 400
         if not all(x in cols_valid for x in data):
-            return {'status': 400, 'message': 'bad_entry',
-                'description': 'Can only have the fields %s' % cols_valid}
+            return {'message': 'bad_entry',
+                'description': 'Can only have the fields %s' % cols_valid}, 400
 
         with shared_connection([dbget0, dbexe]) as [get0, exe]:
             uid = get0('id', 'users where username=%r' % g.username)[0]
@@ -273,7 +273,7 @@ class Id(Resource):
     def get(self, username):
         uids = dbget0('id', 'users where username=%r' % username)
         if not uids:
-            return {'message': 'error: unknown username %r' % username}
+            return {'message': 'error: unknown username %r' % username}, 400
         return {'id': uids[0]}
 
 
@@ -303,6 +303,7 @@ def dbget0(what, where, conn=None):
 
 @contextmanager
 def shared_connection(functions):
+    "Create a connection and yield the given functions but working with it"
     with db.connect() as conn:
         yield [partial(f, conn=conn) for f in functions]
 
