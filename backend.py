@@ -117,7 +117,7 @@ class Login(Resource):
                     'email': r0['email'],
                     'token': token}
         else:
-            return None
+            return {'message': 'error: bad user/password'}, 401
 
 
 class Users(Resource):
