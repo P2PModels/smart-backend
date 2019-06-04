@@ -137,21 +137,27 @@ class Users(Resource):
         "Add user"
         if not request.json:
             raise KeyError
-        cols_required = ['email', 'username', 'password']
-        cols_valid = ['username', 'name', 'password', 'email', 'web']
+        data = request.json.copy()
 
-        if any(x not in request.json for x in cols_required):
+        cols_required = ['email', 'password']
+        cols_valid = cols_required + ['username', 'name', 'web']
+
+        if any(x not in data for x in cols_required):
             return {'status': 400, 'message': 'user_missing_required',
-                'description': 'User must have the fields %s' % cols_required}
-        if not all(x in cols_valid for x in request.json):
+                'description': 'Must have the fields %s' % cols_required}
+        if not all(x in cols_valid for x in data):
             return {'status': 400, 'message': 'bad_entry',
-                'description': 'User can only have the fields %s' % cols_valid}
+                'description': 'Can only have the fields %s' % cols_valid}
 
-        request.json['password'] = sha256(request.json['password'])
-        cols, vals = zip(*request.json.items())
-        # permissions_default = '---------'  ###
+        data.setdefault('username', data['email'])  # username = email
+        data['password'] = sha256(data['password'])  # we store them hashed
+        data.setdefault('name', 'Random User')
+        data['permissions'] = '---------'  # default permissions
+
+        cols, vals = zip(*data.items())
         dbexe('insert into users %r values %r' % (cols, vals))
-        return {'message': 'ok'}
+
+        return {'message': 'ok'}, 201
 
     @auth.login_required
     def put(self, user_id):
@@ -166,13 +172,20 @@ class Users(Resource):
     @auth.login_required
     def delete(self, user_id):
         "Delete user and all references to her"
+        try:
+            uid = dbget0('id', 'users where username=%r' % g.username)[0]
+            assert user_id == uid or uid == 1
+            # FIXME: last part should be something like "or has_permission()"
+        except AssertionError:
+            return {'message': 'error: no permission to delete'}, 403
+
         exe = db.connect().execute
         res = exe('delete from users where id=%d' % user_id)
         if res.rowcount != 1:
             return {'message': 'error: unknown user id %d' % user_id}, 409
 
         exe('delete from user_profiles where id_user=%d' % user_id)
-        exe('delete from user_created_projects where id_user=%d' % user_id)
+        exe('delete from user_organized_projects where id_user=%d' % user_id)
         exe('delete from user_joined_projects where id_user=%d' % user_id)
 
         for pid in dbget0('id', 'projects where organizer=%d' % user_id):
@@ -195,18 +208,40 @@ class Projects(Resource):
         "Add project"
         if not request.json:
             raise KeyError
-        cols, vals = zip(*request.json.items())
+        data = request.json.copy()
+
+        cols_required = ['id', 'name', 'summary', 'needs', 'description']
+        cols_valid = cols_required + ['url', 'img_bg', 'img1', 'img2']
+
+        if any(x not in data for x in cols_required):
+            return {'status': 400, 'message': 'project_missing_required',
+                'description': 'Must have the fields %s' % cols_required}
+        if not all(x in cols_valid for x in data):
+            return {'status': 400, 'message': 'bad_entry',
+                'description': 'Can only have the fields %s' % cols_valid}
+
+        uid = dbget0('id', 'users where username=%r' % g.username)[0]
+        data['organizer'] = uid
+
+        cols, vals = zip(*data.items())
         dbexe('insert into projects %r values %r' % (cols, vals))
+        dbexe('insert into user_organized_projects values (%d, %d)' %
+            (uid, data['id']))
+
         return {'message': 'ok'}, 201
 
     @auth.login_required
     def put(self, project_id):
         "Modify project"
-        add_participants(project_id, request.json.pop('addParticipants', None))
-        del_participants(project_id, request.json.pop('delParticipants', None))
         if not request.json:
+            raise KeyError
+        data = request.json.copy()
+
+        add_participants(project_id, data.pop('addParticipants', None))
+        del_participants(project_id, data.pop('delParticipants', None))
+        if not data:
             return {'message': 'ok'}
-        kvs = ','.join('%r=%r' % k_v for k_v in request.json.items())
+        kvs = ','.join('%r=%r' % k_v for k_v in data.items())
         res = dbexe('update projects set %s where id=%d' % (kvs, project_id))
         if res.rowcount == 1:
             return {'message': 'ok'}
@@ -216,9 +251,16 @@ class Projects(Resource):
     @auth.login_required
     def delete(self, project_id):
         "Delete project and all references to it"
-        ids = dbget0('id', 'projects where id=%d' % project_id)
-        if len(ids) != 1:
+
+        if dbcount('projects where id=%d' % project_id) != 1:
             return {'message': 'error: unknown project id %d' % project_id}, 409
+
+        try:
+            assert is_organizer(g.username, project_id)
+            # NOTE: add "or has_permission()"
+        except AssertionError:
+            return {'message': 'error: no permission to delete'}, 403
+
         del_project(project_id)
         return {'message': 'ok'}
 
@@ -277,7 +319,7 @@ def get_user(uid):
             '(select id_profile from user_profiles where id_user=%d)' % uid)
 
     user['projects_created'] = dbget0('id_project',
-        'user_created_projects where id_user=%d' % uid)
+        'user_organized_projects where id_user=%d' % uid)
 
     user['projects_joined'] = dbget0('id_project',
         'user_joined_projects where id_user=%d' % uid)
@@ -306,11 +348,19 @@ def get_project(pid):
     return strip(project)
 
 
+def is_organizer(username, project_id):
+    "Return True iff user is the organizer of the given project"
+    uid = dbget0('id', 'users where username=%r' % username)[0]
+    print(uid)
+    return dbcount('user_organized_projects where '
+        'id_user=%d and id_project=%d' % (uid, project_id)) == 1
+
+
 def del_project(pid):
     "Delete a project and everywhere where it appears referenced"
     exe = db.connect().execute
     exe('delete from projects where id=%d' % pid)
-    exe('delete from user_created_projects where id_project=%d' % pid)
+    exe('delete from user_organized_projects where id_project=%d' % pid)
     exe('delete from user_joined_projects where id_project=%d' % pid)
     exe('delete from project_requested_profiles where id_project=%d' % pid)
 

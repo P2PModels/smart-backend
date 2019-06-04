@@ -33,8 +33,8 @@ create table user_profiles (
     id_user integer,
     id_profile integer);
 
-drop table if exists user_created_projects;
-create table user_created_projects (
+drop table if exists user_organized_projects;
+create table user_organized_projects (
     id_user integer,
     id_project integer);
 

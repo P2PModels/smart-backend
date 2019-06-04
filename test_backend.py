@@ -68,7 +68,9 @@ def add_test_project():
     except urllib.error.HTTPError as e:
         pass
 
-    data = jdumps({'id': 1000, 'organizer': 1, 'name': 'Test project'})
+    data = jdumps({'id': 1000, 'name': 'Test project',
+        'summary': 'This is a summary.', 'needs': 'We need nothing here.',
+        'description': 'This is an empty descritpion.'})
     return post('projects', data=data)
 
 
@@ -80,14 +82,18 @@ def del_test_project():
 
 def test_not_found():
     try:
-        req.urlopen(urlbase)
+        url = urlbase + 'nonexistent'
+        req.urlopen(url)
+        raise Exception('We should not have found that url: %s' % url)
     except urllib.error.HTTPError as e:
         assert (e.getcode(), e.msg) == (404, 'NOT FOUND')
 
 
 def test_unauthorized():
     try:
-        req.urlopen(urlbase + 'users')
+        url = urlbase + 'users/1'
+        req.urlopen(req.Request(url, method='DELETE'))
+        raise Exception('We should not have access to that url: %s' % url)
     except urllib.error.HTTPError as e:
         assert (e.getcode(), e.msg) == (401, 'UNAUTHORIZED')
 

@@ -36,7 +36,7 @@ insert into projects values
     (3, 2, 'Frontend', 'What will be shown', 'This project...', 'We need...',
     'https://project3.org', '1.png', '2.png', '3.jpg');
 
-insert into user_created_projects values  -- id_user, id_project
+insert into user_organized_projects values  -- id_user, id_project
     (1, 1), (1, 2),
     (2, 3);
 
