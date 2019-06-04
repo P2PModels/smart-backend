@@ -13,7 +13,6 @@ REST call examples:
 """
 
 # TODO:
-#   * Use werkzeug.security hashed passwords.
 #   * Add and remove profiles to projects.
 #   * Use user permissions to see & change data.
 #   * Sanitize sql inputs.
@@ -345,9 +344,8 @@ def get_project(pid):
 
 
 def is_organizer(username, project_id):
-    "Return True iff user is the organizer of the given project"
+    "Return True only if user is the organizer of the given project"
     uid = dbget0('id', 'users where username=%r' % username)[0]
-    print(uid)
     return dbcount('user_organized_projects where '
         'id_user=%d and id_project=%d' % (uid, project_id)) == 1
 
