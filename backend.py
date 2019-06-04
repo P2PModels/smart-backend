@@ -13,6 +13,8 @@ REST call examples:
 """
 
 # TODO:
+#   * Use werkzeug.security hashed passwords.
+#   * Add and remove profiles to projects.
 #   * Use user permissions to see & change data.
 #   * Sanitize sql inputs.
 #   * Catch and process well all cases when request.json is empty or invalid.
