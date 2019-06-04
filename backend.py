@@ -17,8 +17,6 @@ REST call examples:
 #   * Use user permissions to see & change data.
 #   * Sanitize sql inputs.
 #   * Catch and process well all cases when request.json is empty or invalid.
-#   * Maybe reuse the connection when there are several db* calls at once.
-#   * Maybe use context managers to close cleanly the connections.
 
 # We will take ideas for our api from
 # https://docs.dhis2.org/master/en/developer/html/webapi.html
@@ -53,6 +51,8 @@ REST call examples:
 
 
 import os
+from functools import partial
+from contextlib import contextmanager
 from flask import Flask, request, g
 from flask_httpauth import HTTPBasicAuth, HTTPTokenAuth, MultiAuth
 from flask_restful import Resource, Api
@@ -167,25 +167,25 @@ class Users(Resource):
     @auth.login_required
     def delete(self, user_id):
         "Delete user and all references to her"
-        try:
-            uid = dbget0('id', 'users where username=%r' % g.username)[0]
-            assert user_id == uid or uid == 1
-            # FIXME: last part should be something like "or has_permission()"
-        except AssertionError:
-            return {'message': 'error: no permission to delete'}, 403
+        with shared_connection([dbget0, dbexe]) as [get0, exe]:
+            try:
+                uid = get0('id', 'users where username=%r' % g.username)[0]
+                assert user_id == uid or uid == 1
+                # FIXME: last part should be something like "or has_permission()"
+            except AssertionError:
+                return {'message': 'error: no permission to delete'}, 403
 
-        exe = db.connect().execute
-        res = exe('delete from users where id=%d' % user_id)
-        if res.rowcount != 1:
-            return {'message': 'error: unknown user id %d' % user_id}, 409
+            res = exe('delete from users where id=%d' % user_id)
+            if res.rowcount != 1:
+                return {'message': 'error: unknown user id %d' % user_id}, 409
 
-        exe('delete from user_profiles where id_user=%d' % user_id)
-        exe('delete from user_organized_projects where id_user=%d' % user_id)
-        exe('delete from user_joined_projects where id_user=%d' % user_id)
+            exe('delete from user_profiles where id_user=%d' % user_id)
+            exe('delete from user_organized_projects where id_user=%d' % user_id)
+            exe('delete from user_joined_projects where id_user=%d' % user_id)
 
-        for pid in dbget0('id', 'projects where organizer=%d' % user_id):
-            del_project(pid)
-        # NOTE: we could insted move them to a list of orphaned projects.
+            for pid in get0('id', 'projects where organizer=%d' % user_id):
+                del_project(pid)
+            # NOTE: we could insted move them to a list of orphaned projects.
 
         return {'message': 'ok'}
 
@@ -215,13 +215,14 @@ class Projects(Resource):
             return {'status': 400, 'message': 'bad_entry',
                 'description': 'Can only have the fields %s' % cols_valid}
 
-        uid = dbget0('id', 'users where username=%r' % g.username)[0]
-        data['organizer'] = uid
+        with shared_connection([dbget0, dbexe]) as [get0, exe]:
+            uid = get0('id', 'users where username=%r' % g.username)[0]
+            data['organizer'] = uid
 
-        cols, vals = zip(*data.items())
-        dbexe('insert into projects %r values %r' % (cols, vals))
-        dbexe('insert into user_organized_projects values (%d, %d)' %
-            (uid, data['id']))
+            cols, vals = zip(*data.items())
+            exe('insert into projects %r values %r' % (cols, vals))
+            exe('insert into user_organized_projects values (%d, %d)' %
+                (uid, data['id']))
 
         return {'message': 'ok'}, 201
 
@@ -300,54 +301,63 @@ def dbget0(what, where, conn=None):
     return [x[what] for x in dbget(what, where, conn)]
 
 
+@contextmanager
+def shared_connection(functions):
+    with db.connect() as conn:
+        yield [partial(f, conn=conn) for f in functions]
+
+
 def get_user(uid):
     "Return all the fields of a given user"
-    users = dbget('id,username,name,permissions,email,web',
-        'users where id=%d' % uid)
-    if len(users) == 0:
-        return {'message': 'error: unknown user id %d' % uid}, 409
+    with shared_connection([dbget, dbget0]) as [get, get0]:
+        users = get('id,username,name,permissions,email,web',
+            'users where id=%d' % uid)
+        if len(users) == 0:
+            return {'message': 'error: unknown user id %d' % uid}, 409
 
-    user = users[0]
+        user = users[0]
 
-    user['profiles'] = dbget0('profile_name',
-        'profiles where id in '
-            '(select id_profile from user_profiles where id_user=%d)' % uid)
+        user['profiles'] = get0('profile_name',
+            'profiles where id in '
+                '(select id_profile from user_profiles where id_user=%d)' % uid)
 
-    user['projects_created'] = dbget0('id_project',
-        'user_organized_projects where id_user=%d' % uid)
+        user['projects_created'] = get0('id_project',
+            'user_organized_projects where id_user=%d' % uid)
 
-    user['projects_joined'] = dbget0('id_project',
-        'user_joined_projects where id_user=%d' % uid)
+        user['projects_joined'] = get0('id_project',
+            'user_joined_projects where id_user=%d' % uid)
 
     return strip(user)
 
 
 def get_project(pid):
     "Return all the fields of a given project"
-    projects = dbget(
-        'id,organizer,name,summary,description,needs,url,img_bg,img1,img2',
-        'projects where id=%d' % pid)
-    if len(projects) == 0:
-        return {'message': 'error: unknown project id %d' % pid}, 409
+    with shared_connection([dbget, dbget0]) as [get, get0]:
+        projects = get(
+            'id,organizer,name,summary,description,needs,url,img_bg,img1,img2',
+            'projects where id=%d' % pid)
+        if len(projects) == 0:
+            return {'message': 'error: unknown project id %d' % pid}, 409
 
-    project = projects[0]
+        project = projects[0]
 
-    project['participants'] = dbget0('id_user',
-        'user_joined_projects where id_project=%d' % pid)
+        project['participants'] = get0('id_user',
+            'user_joined_projects where id_project=%d' % pid)
 
-    project['requested_profiles'] = dbget0('profile_name',
-        'profiles where id in '
-        '  (select id_profile from project_requested_profiles '
-        '   where id_project=%d)' % pid)
+        project['requested_profiles'] = get0('profile_name',
+            'profiles where id in '
+            '  (select id_profile from project_requested_profiles '
+            '   where id_project=%d)' % pid)
 
     return strip(project)
 
 
 def is_organizer(username, project_id):
     "Return True only if user is the organizer of the given project"
-    uid = dbget0('id', 'users where username=%r' % username)[0]
-    return dbcount('user_organized_projects where '
-        'id_user=%d and id_project=%d' % (uid, project_id)) == 1
+    with shared_connection([dbget0, dbcount]) as [get0, count]:
+        uid = get0('id', 'users where username=%r' % username)[0]
+        return count('user_organized_projects '
+            'where id_user=%d and id_project=%d' % (uid, project_id)) == 1
 
 
 def del_project(pid):
