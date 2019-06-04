@@ -100,7 +100,6 @@ class ExistingParticipantError(Exception):
 class Login(Resource):
     def post(self):
         "Return info about the user if successfully logged, None otherwise"
-        return None, 401
         name = request.json['usernameOrEmail']
         fields = 'id,username,name,password,email'
 
