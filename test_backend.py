@@ -99,7 +99,8 @@ def test_unauthorized():
 
 
 def test_auth_basic():
-    get('users')
+    put('projects/1', data=jdumps({'name': 'Auth tested project'}))
+    # If we are not authenticated, that request will raise an error.
 
 
 def test_auth_bearer():
@@ -113,6 +114,7 @@ def test_auth_bearer():
 
     open_with_token('user1', 'abc')
     open_with_token('johnny@ucm.es', 'abc')
+    # If we are not authenticated, those requests will raise an error.
 
 
 def test_get_users():
