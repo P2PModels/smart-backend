@@ -2,18 +2,18 @@
 
 insert into users values
     (1, 'user1', 'Johnny B. Goode',
-     'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+     'pbkdf2:sha256:50000$713rFBmU$1e10a0e9b5fca0b4550b39dffd01931d8cdc64760d5995856e9c775e94e983dd',
      'rxwrxwrxw', 'johnny@ucm.es', 'https://example1.org'),
     (2, 'user2', 'Maria',
-     'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3',
+     'pbkdf2:sha256:50000$w4xHhhi8$75b2502e4680383c5fc89423e446b847021b52b086648897b8a6dcba60e771cb',
      'r--r--r--', 'maria@ucm.es', 'https://example2.org'),
     (3, 'user3', 'Debbie',
-     '3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282',
+     'pbkdf2:sha256:50000$g2cIiryf$b0da4704216e5128544a831ba293adcc7aae3d730df9464cba5943fdf2b33c92',
      '---------', 'debbie@ucm.es', 'http://example3.org');
 
--- abc -> ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
--- 123 -> a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3
--- xyz -> 3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282
+-- abc -> pbkdf2:sha256:50000$713rFBmU$1e10a0e9b...
+-- 123 -> pbkdf2:sha256:50000$w4xHhhi8$75b2502e4...
+-- xyz -> pbkdf2:sha256:50000$g2cIiryf$b0da47042...
 
 
 insert into profiles values

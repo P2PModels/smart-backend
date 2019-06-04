@@ -54,13 +54,13 @@ REST call examples:
 
 
 import os
-import hashlib
 from flask import Flask, request, g
 from flask_httpauth import HTTPBasicAuth, HTTPTokenAuth, MultiAuth
 from flask_restful import Resource, Api
 from flask_cors import CORS
 import sqlalchemy
 from itsdangerous import TimedJSONWebSignatureSerializer as JSONSigSerializer
+from werkzeug.security import generate_password_hash, check_password_hash
 
 db = None  # call initialize() to fill these up
 serializer = None  # this one is used for the token auth
@@ -72,15 +72,11 @@ auth_basic = HTTPBasicAuth()
 auth_token = HTTPTokenAuth('Bearer')
 auth = MultiAuth(auth_basic, auth_token)
 
-@auth_basic.get_password
-def get_pw(username):
+@auth_basic.verify_password
+def verify_password(username, password):
     g.username = username
-    passwords = dbget0('password', 'users where username=%r' % username)
-    return passwords[0] if len(passwords) == 1 else None
-
-@auth_basic.hash_password
-def hash_pw(password):
-    return sha256(password)  # we keep our passwords encrypted (hashed)
+    res = dbget0('password', 'users where username=%r' % username)
+    return check_password_hash(res[0], password) if res else False
 
 @auth_token.verify_token
 def verify_token(token):
@@ -115,7 +111,7 @@ class Login(Resource):
                 return None
         r0 = res[0]
 
-        if r0['password'] == sha256(request.json['password']):
+        if check_password_hash(r0['password'], request.json['password']):
             token = serializer.dumps(r0['username']).decode('utf8')
             return {'id': r0['id'],
                     'name': r0['name'],
@@ -150,7 +146,7 @@ class Users(Resource):
                 'description': 'Can only have the fields %s' % cols_valid}
 
         data.setdefault('username', data['email'])  # username = email
-        data['password'] = sha256(data['password'])  # we store them hashed
+        data['password'] = generate_password_hash(data['password'])
         data.setdefault('name', 'Random User')
         data['permissions'] = '---------'  # default permissions
 
@@ -403,10 +399,6 @@ def del_participants(pid, uids):
 
     dbexe('delete from user_joined_projects where '
         'id_user in %s and id_project=%d' % (uids_str, pid))
-
-
-def sha256(txt):
-    return hashlib.sha256(txt.encode('utf8')).hexdigest()
 
 
 # App initialization.
