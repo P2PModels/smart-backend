@@ -100,6 +100,7 @@ class ExistingParticipantError(Exception):
 class Login(Resource):
     def post(self):
         "Return info about the user if successfully logged, None otherwise"
+        return None, 401
         name = request.json['usernameOrEmail']
         fields = 'id,username,name,password,email'
 
@@ -107,7 +108,7 @@ class Login(Resource):
         if len(res) == 0:
             res = dbget(fields, 'users where email=%r' % name)
             if len(res) == 0:
-                return None
+                return {'message': 'error: bad user'}, 401
         r0 = res[0]
 
         if check_password_hash(r0['password'], request.json['password']):
@@ -117,7 +118,7 @@ class Login(Resource):
                     'email': r0['email'],
                     'token': token}
         else:
-            return {'message': 'error: bad user/password'}, 401
+            return {'message': 'error: bad password'}, 401
 
 
 class Users(Resource):
