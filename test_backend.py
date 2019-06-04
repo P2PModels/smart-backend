@@ -6,6 +6,7 @@ The backend server must be running for the tests to run properly.
 Run with "pytest-3".
 """
 
+from contextlib import contextmanager
 import urllib.request as req
 import urllib.error
 import json
@@ -47,9 +48,16 @@ def jdumps(obj):
     return json.dumps(obj).encode('utf8')
 
 
+@contextmanager
+def test_user():
+    add_test_user()
+    yield
+    del_test_user()
+
+
 def add_test_user():
     if 'id' in get('id/test_user'):
-        raise Exception('User with id 1000 already exists.')
+        raise Exception('test_user already exists.')
 
     data = jdumps({'username': 'test_user',
         'name': 'Random User', 'password': 'booo', 'email': 'test@ucm.es'})
@@ -76,6 +84,13 @@ def add_test_project():
 
 def del_test_project():
     return delete('projects/1000')
+
+
+@contextmanager
+def test_project():
+    add_test_project()
+    yield
+    del_test_project()
 
 
 # The tests.
@@ -152,43 +167,37 @@ def test_add_del_project():
 
 
 def test_change_user():
-    add_test_user()
-    uid = get('id/test_user')['id']
-    assert get('users/%s' % uid)['name'] == 'Random User'
+    with test_user():
+        uid = get('id/test_user')['id']
+        assert get('users/%s' % uid)['name'] == 'Random User'
 
-    res = put('users/%s' % uid, data=jdumps({'name': 'Newman'}))
-    assert res['message'] == 'ok'
+        res = put('users/%s' % uid, data=jdumps({'name': 'Newman'}))
+        assert res['message'] == 'ok'
 
-    assert get('users/%s' % uid)['name'] == 'Newman'
-    del_test_user()
+        assert get('users/%s' % uid)['name'] == 'Newman'
 
 
 def test_change_project():
-    add_test_project()
-    assert get('projects/1000')['name'] == 'Test project'
+    with test_project():
+        assert get('projects/1000')['name'] == 'Test project'
 
-    res = put('projects/1000', data=jdumps({'name': 'changed'}))
-    assert res['message'] == 'ok'
+        res = put('projects/1000', data=jdumps({'name': 'changed'}))
+        assert res['message'] == 'ok'
 
-    assert get('projects/1000')['name'] == 'changed'
-    del_test_project()
+        assert get('projects/1000')['name'] == 'changed'
 
 
 def test_add_del_participants():
-    add_test_user()
-    uid = get('id/test_user')['id']
-    add_test_project()
+    with test_user():
+        uid = get('id/test_user')['id']
+        with test_project():
+            res = put('projects/1000', data=jdumps({'addParticipants': [uid]}))
+            assert res['message'] == 'ok'
 
-    res = put('projects/1000', data=jdumps({'addParticipants': [uid]}))
-    assert res['message'] == 'ok'
+            assert uid in get('projects/1000')['participants']
 
-    assert uid in get('projects/1000')['participants']
-
-    res = put('projects/1000', data=jdumps({'delParticipants': [uid]}))
-    assert res['message'] == 'ok'
-
-    del_test_project()
-    del_test_user()
+            res = put('projects/1000', data=jdumps({'delParticipants': [uid]}))
+            assert res['message'] == 'ok'
 
 
 def test_get_info():
