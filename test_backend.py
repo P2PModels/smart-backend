@@ -51,8 +51,10 @@ def jdumps(obj):
 @contextmanager
 def test_user():
     add_test_user()
-    yield
-    del_test_user()
+    try:
+        yield
+    finally:
+        del_test_user()
 
 
 def add_test_user():
@@ -92,8 +94,10 @@ def del_test_project():
 @contextmanager
 def test_project():
     add_test_project()
-    yield
-    del_test_project()
+    try:
+        yield
+    finally:
+        del_test_project()
 
 
 # The tests.
@@ -205,3 +209,16 @@ def test_add_del_participants():
 
 def test_get_info():
     assert get('info') == get('users/1')
+
+
+def test_existing_user():
+    with test_user():
+        try:
+            data = jdumps({
+                'username': 'test_user', 'name': 'Random User',
+                'password': 'booo', 'email': 'test@ucm.es'})
+            post('users', data=data)
+        except urllib.error.HTTPError as e:
+            assert e.code == 400
+            res = json.loads(e.file.read())
+            assert res['message'].startswith('Error adding user')
