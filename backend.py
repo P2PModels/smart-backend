@@ -32,7 +32,7 @@ REST call examples:
 #   email: str
 #   web: str
 #   profiles: list of str
-#   projects_created: list of projects
+#   projects_organized: list of projects
 #   projects_joined: list of projects
 #
 # project
