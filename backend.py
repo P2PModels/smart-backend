@@ -53,7 +53,7 @@ REST call examples:
 import os
 from functools import partial
 from contextlib import contextmanager
-from flask import Flask, request, g
+from flask import Flask, request, jsonify, g
 from flask_httpauth import HTTPBasicAuth, HTTPTokenAuth, MultiAuth
 from flask_restful import Resource, Api
 from flask_cors import CORS
@@ -86,13 +86,13 @@ def verify_token(token):
         return False
 
 
-# Define the customized exceptions.
+# Customized exception.
 
-class NonexistingUserError(Exception):
-    pass
-
-class ExistingParticipantError(Exception):
-    pass
+class InvalidUsage(Exception):
+    def __init__(self, message, status_code=400):
+        Exception.__init__(self)
+        self.message = message
+        self.status_code = status_code
 
 
 # REST api.
@@ -107,7 +107,7 @@ class Login(Resource):
         if len(res) == 0:
             res = dbget(fields, 'users where email=%r' % name)
             if len(res) == 0:
-                return {'message': 'error: bad user'}, 401
+                return {'message': 'Error: bad user'}, 401
         r0 = res[0]
 
         if check_password_hash(r0['password'], request.json['password']):
@@ -117,7 +117,7 @@ class Login(Resource):
                     'email': r0['email'],
                     'token': token}
         else:
-            return {'message': 'error: bad password'}, 401
+            return {'message': 'Error: bad password'}, 401
 
 
 class Users(Resource):
@@ -131,7 +131,7 @@ class Users(Resource):
     def post(self):
         "Add user"
         if not request.json:
-            raise KeyError
+            raise InvalidUsage('Missing json content')
         data = request.json.copy()
 
         cols_required = ['email', 'password']
@@ -150,7 +150,10 @@ class Users(Resource):
         data['permissions'] = '---------'  # default permissions
 
         cols, vals = zip(*data.items())
-        dbexe('insert into users %r values %r' % (cols, vals))
+        try:
+            dbexe('insert into users %r values %r' % (cols, vals))
+        except sqlalchemy.exc.IntegrityError as e:
+            raise InvalidUsage('Error adding user: %s' % e)
 
         return {'message': 'ok'}, 201
 
@@ -162,7 +165,7 @@ class Users(Resource):
         if res.rowcount == 1:
             return {'message': 'ok'}
         else:
-            return {'message': 'error: unknown user id %d' % user_id}, 409
+            return {'message': 'Error: unknown user id %d' % user_id}, 409
 
     @auth.login_required
     def delete(self, user_id):
@@ -173,11 +176,11 @@ class Users(Resource):
                 assert user_id == uid or uid == 1
                 # FIXME: last part should be something like "or has_permission()"
             except AssertionError:
-                return {'message': 'error: no permission to delete'}, 403
+                return {'message': 'Error: no permission to delete'}, 403
 
             res = exe('delete from users where id=%d' % user_id)
             if res.rowcount != 1:
-                return {'message': 'error: unknown user id %d' % user_id}, 409
+                return {'message': 'Error: unknown user id %d' % user_id}, 409
 
             exe('delete from user_profiles where id_user=%d' % user_id)
             exe('delete from user_organized_projects where id_user=%d' % user_id)
@@ -202,7 +205,7 @@ class Projects(Resource):
     def post(self):
         "Add project"
         if not request.json:
-            raise KeyError
+            raise InvalidUsage('Missing json content')
         data = request.json.copy()
 
         cols_required = ['id', 'name', 'summary', 'needs', 'description']
@@ -242,20 +245,20 @@ class Projects(Resource):
         if res.rowcount == 1:
             return {'message': 'ok'}
         else:
-            return {'message': 'error: unknown project id %d' % project_id}, 409
+            return {'message': 'Error: unknown project id %d' % project_id}, 409
 
     @auth.login_required
     def delete(self, project_id):
         "Delete project and all references to it"
 
         if dbcount('projects where id=%d' % project_id) != 1:
-            return {'message': 'error: unknown project id %d' % project_id}, 409
+            return {'message': 'Error: unknown project id %d' % project_id}, 409
 
         try:
             assert is_organizer(g.username, project_id)
             # NOTE: add "or has_permission()"
         except AssertionError:
-            return {'message': 'error: no permission to delete'}, 403
+            return {'message': 'Error: no permission to delete'}, 403
 
         del_project(project_id)
         return {'message': 'ok'}
@@ -273,7 +276,7 @@ class Id(Resource):
     def get(self, username):
         uids = dbget0('id', 'users where username=%r' % username)
         if not uids:
-            return {'message': 'error: unknown username %r' % username}, 400
+            return {'message': 'Error: unknown username %r' % username}, 400
         return {'id': uids[0]}
 
 
@@ -314,7 +317,7 @@ def get_user(uid):
         users = get('id,username,name,permissions,email,web',
             'users where id=%d' % uid)
         if len(users) == 0:
-            return {'message': 'error: unknown user id %d' % uid}, 409
+            return {'message': 'Error: unknown user id %d' % uid}, 409
 
         user = users[0]
 
@@ -386,10 +389,10 @@ def add_participants(pid, uids):
     uids_str = '(%s)' % ','.join('%d' % x for x in uids)  # -> '(u1, u2, ...)'
 
     if dbcount('users where id in %s' % uids_str) != len(uids):
-        raise NonexistingUserError
+        raise InvalidUsage('Error: nonexisting user in %s' % uids_str)
     if dbcount('user_joined_projects '
         'where id_project=%d and id_user in %s' % (pid, uids_str)) != 0:
-        raise ExistingParticipantError
+        raise InvalidUsage('Tried to add an already existing participant')
 
     values = ','.join('(%d, %d)' % (uid, pid) for uid in uids)
     dbexe('insert into user_joined_projects (id_user, id_project) '
@@ -404,7 +407,7 @@ def del_participants(pid, uids):
 
     if dbcount('user_joined_projects '
         'where id_project=%d and id_user in %s' % (pid, uids_str)) != len(uids):
-        raise NonexistingUserError
+        raise InvalidUsage('Error: nonexisting user in %s' % uids_str)
 
     dbexe('delete from user_joined_projects where '
         'id_user in %s and id_project=%d' % (uids_str, pid))
@@ -422,7 +425,7 @@ def initialize(db_name='smart.db'):
     app.config['SECRET_KEY'] = os.urandom(256)
     serializer = JSONSigSerializer(app.config['SECRET_KEY'], expires_in=3600)
 
-    api = Api(app, errors=error_messages)
+    api = Api(app)
     add_resources(api)
 
     @app.route('/')
@@ -430,30 +433,13 @@ def initialize(db_name='smart.db'):
         return ('<html>\n<head>\n<title>Description</title>\n</head>\n'
             '<body>\n<pre>' + __doc__ + '</pre>\n</body>\n</html>')
 
+    @app.errorhandler(InvalidUsage)
+    def handle_invalid_usage(error):
+        response = jsonify({'message': error.message})
+        response.status_code = error.status_code
+        return response
+
     return app
-
-
-error_messages = {  # sent on different exceptions
-    'ExistingParticipantError': {
-        'status': 400,
-        'message': 'existing_participant',
-        'description': 'Tried to add an already existing participant.'},
-    'NonexistingUserError': {
-        'status': 400,
-        'message': 'nonexisting_user',
-        'description': 'Referenced a nonexisting user.'},
-    'IntegrityError': {
-        'status': 400,
-        'message': 'bad_request',
-        'description': 'Our database did not like that.'},
-    'OperationalError': {
-        'status': 400,
-        'message': 'bad_field',
-        'description': 'Seems you used a nonexisting field.'},
-    'KeyError': {
-        'status': 400,
-        'message': 'missing_field',
-        'description': 'Seems you forgot something in your request.'}}
 
 
 def add_resources(api):
