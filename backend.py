@@ -13,6 +13,7 @@ REST call examples:
 """
 
 # TODO:
+#   * Finish adding ? in all possible queries, and check for valid keys only.
 #   * Add and remove profiles to projects.
 #   * Use user permissions to see & change data.
 #   * Sanitize sql inputs.
@@ -74,7 +75,7 @@ auth = MultiAuth(auth_basic, auth_token)
 @auth_basic.verify_password
 def verify_password(username, password):
     g.username = username
-    res = dbget0('password', 'users where username=%r' % username)
+    res = dbget0('password', 'users where username=?', username)
     return check_password_hash(res[0], password) if res else False
 
 @auth_token.verify_token
@@ -103,9 +104,9 @@ class Login(Resource):
         name = request.json['usernameOrEmail']
         fields = 'id,username,name,password,email'
 
-        res = dbget(fields, 'users where username=%r' % name)
+        res = dbget(fields, 'users where username=?', name)
         if len(res) == 0:
-            res = dbget(fields, 'users where email=%r' % name)
+            res = dbget(fields, 'users where email=?', name)
             if len(res) == 0:
                 return {'message': 'Error: bad user'}, 401
         r0 = res[0]
@@ -151,7 +152,8 @@ class Users(Resource):
 
         cols, vals = zip(*data.items())
         try:
-            dbexe('insert into users %r values %r' % (cols, vals))
+            qs = '(%s)' % ','.join('?' for i in range(len(cols)))
+            dbexe('insert into users %r values %s' % (tuple(cols), qs), vals)
         except sqlalchemy.exc.IntegrityError as e:
             raise InvalidUsage('Error adding user: %s' % e)
 
@@ -160,8 +162,11 @@ class Users(Resource):
     @auth.login_required
     def put(self, user_id):
         "Modify user"
-        kvs = ','.join('%r=%r' % k_v for k_v in request.json.items())
-        res = dbexe('update users set %s where id=%d' % (kvs, user_id))
+        data = request.json.copy()
+        # TODO: Check that only valid keys are passed.
+        cols, vals = zip(*data.items())
+        qs = ','.join('%s=?' % x for x in cols)
+        res = dbexe('update users set %s where id=%d' % (qs, user_id), vals)
         if res.rowcount == 1:
             return {'message': 'ok'}
         else:
@@ -172,21 +177,21 @@ class Users(Resource):
         "Delete user and all references to her"
         with shared_connection([dbget0, dbexe]) as [get0, exe]:
             try:
-                uid = get0('id', 'users where username=%r' % g.username)[0]
+                uid = get0('id', 'users where username=?', g.username)[0]
                 assert user_id == uid or uid == 1
                 # FIXME: last part should be something like "or has_permission()"
             except AssertionError:
                 return {'message': 'Error: no permission to delete'}, 403
 
-            res = exe('delete from users where id=%d' % user_id)
+            res = exe('delete from users where id=?', user_id)
             if res.rowcount != 1:
                 return {'message': 'Error: unknown user id %d' % user_id}, 409
 
-            exe('delete from user_profiles where id_user=%d' % user_id)
-            exe('delete from user_organized_projects where id_user=%d' % user_id)
-            exe('delete from user_joined_projects where id_user=%d' % user_id)
+            exe('delete from user_profiles where id_user=?', user_id)
+            exe('delete from user_organized_projects where id_user=?', user_id)
+            exe('delete from user_joined_projects where id_user=?', user_id)
 
-            for pid in get0('id', 'projects where organizer=%d' % user_id):
+            for pid in get0('id', 'projects where organizer=?', user_id):
                 del_project(pid)
             # NOTE: we could insted move them to a list of orphaned projects.
 
@@ -219,7 +224,7 @@ class Projects(Resource):
                 'description': 'Can only have the fields %s' % cols_valid}, 400
 
         with shared_connection([dbget0, dbexe]) as [get0, exe]:
-            uid = get0('id', 'users where username=%r' % g.username)[0]
+            uid = get0('id', 'users where username=?', g.username)[0]
             data['organizer'] = uid
 
             cols, vals = zip(*data.items())
@@ -251,7 +256,7 @@ class Projects(Resource):
     def delete(self, project_id):
         "Delete project and all references to it"
 
-        if dbcount('projects where id=%d' % project_id) != 1:
+        if dbcount('projects where id=?', project_id) != 1:
             return {'message': 'Error: unknown project id %d' % project_id}, 409
 
         try:
@@ -268,13 +273,13 @@ class Info(Resource):
     @auth.login_required
     def get(self):
         "Return info about the currently logged user"
-        uid = dbget0('id', 'users where username=%r' % g.username)[0]
+        uid = dbget0('id', 'users where username=?', g.username)[0]
         return get_user(uid)
 
 
 class Id(Resource):
     def get(self, username):
-        uids = dbget0('id', 'users where username=%r' % username)
+        uids = dbget0('id', 'users where username=?', username)
         if not uids:
             return {'message': 'Error: unknown username %r' % username}, 400
         return {'id': uids[0]}
@@ -283,25 +288,25 @@ class Id(Resource):
 
 # Auxiliary functions.
 
-def dbexe(command, conn=None):
+def dbexe(command, *args, conn=None):
     conn = conn or db.connect()
-    return conn.execute(command)
+    return conn.execute(command, *args)
 
 
-def dbcount(where, conn=None):
-    return dbexe('select count(*) from %s' % where, conn).fetchone()[0]
+def dbcount(where, *args, conn=None):
+    return dbexe('select count(*) from %s' % where, *args, conn=conn).fetchone()[0]
 
 
-def dbget(what, where, conn=None):
+def dbget(what, where, *args, conn=None):
     "Return result of the query 'select what from where' as a list of dicts"
-    res = dbexe('select %s from %s' % (what, where), conn).fetchall()
+    res = dbexe('select %s from %s' % (what, where), *args, conn=conn).fetchall()
     return [dict(zip(what.split(','), x)) for x in res]
 
 
-def dbget0(what, where, conn=None):
+def dbget0(what, where, *args, conn=None):
     "Return a list of the single column of values from get()"
     assert ',' not in what, 'Use this function to select a single column only'
-    return [x[what] for x in dbget(what, where, conn)]
+    return [x[what] for x in dbget(what, where, *args, conn=conn)]
 
 
 @contextmanager
@@ -315,7 +320,7 @@ def get_user(uid):
     "Return all the fields of a given user"
     with shared_connection([dbget, dbget0]) as [get, get0]:
         users = get('id,username,name,permissions,email,web',
-            'users where id=%d' % uid)
+            'users where id=?', uid)
         if len(users) == 0:
             return {'message': 'Error: unknown user id %d' % uid}, 409
 
@@ -323,13 +328,13 @@ def get_user(uid):
 
         user['profiles'] = get0('profile_name',
             'profiles where id in '
-                '(select id_profile from user_profiles where id_user=%d)' % uid)
+                '(select id_profile from user_profiles where id_user=?)', uid)
 
         user['projects_created'] = get0('id_project',
-            'user_organized_projects where id_user=%d' % uid)
+            'user_organized_projects where id_user=?', uid)
 
         user['projects_joined'] = get0('id_project',
-            'user_joined_projects where id_user=%d' % uid)
+            'user_joined_projects where id_user=?', uid)
 
     return strip(user)
 
@@ -339,19 +344,19 @@ def get_project(pid):
     with shared_connection([dbget, dbget0]) as [get, get0]:
         projects = get(
             'id,organizer,name,summary,description,needs,url,img_bg,img1,img2',
-            'projects where id=%d' % pid)
+            'projects where id=?', pid)
         if len(projects) == 0:
             return {'message': 'error: unknown project id %d' % pid}, 409
 
         project = projects[0]
 
         project['participants'] = get0('id_user',
-            'user_joined_projects where id_project=%d' % pid)
+            'user_joined_projects where id_project=?', pid)
 
         project['requested_profiles'] = get0('profile_name',
             'profiles where id in '
             '  (select id_profile from project_requested_profiles '
-            '   where id_project=%d)' % pid)
+            '   where id_project=?)', pid)
 
     return strip(project)
 
@@ -359,9 +364,9 @@ def get_project(pid):
 def is_organizer(username, project_id):
     "Return True only if user is the organizer of the given project"
     with shared_connection([dbget0, dbcount]) as [get0, count]:
-        uid = get0('id', 'users where username=%r' % username)[0]
+        uid = get0('id', 'users where username=?', username)[0]
         return count('user_organized_projects '
-            'where id_user=%d and id_project=%d' % (uid, project_id)) == 1
+            'where id_user=? and id_project=?', (uid, project_id)) == 1
 
 
 def del_project(pid):
