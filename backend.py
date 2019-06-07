@@ -13,8 +13,8 @@ REST call examples:
 """
 
 # TODO:
-#   * Add and remove profiles to projects.
 #   * Use user permissions to see & change data.
+#   * Add logic and endpoint to recover the password and similar.
 
 # We will take ideas for our api from
 # https://docs.dhis2.org/master/en/developer/html/webapi.html
@@ -150,6 +150,10 @@ class Users(Resource):
     @auth.login_required
     def put(self, user_id):
         "Modify user"
+        if g.user_id not in [user_id, 1]:
+            # FIXME: this should be something like "if has_permission():"
+            raise InvalidUsage('Error: no permission to modify', 403)
+
         data = get_fields(
             valid_extra=['email', 'password', 'username', 'name', 'web'])
 
@@ -167,13 +171,11 @@ class Users(Resource):
     @auth.login_required
     def delete(self, user_id):
         "Delete user and all references to her"
-        with shared_connection([dbget0, dbexe]) as [get0, exe]:
-            try:
-                assert user_id == g.user_id or g.user_id == 1
-                # FIXME: last part should be something like "or has_permission()"
-            except AssertionError:
-                return {'message': 'Error: no permission to delete'}, 403
+        if g.user_id not in [user_id, 1]:
+            # FIXME: this should be something like "if has_permission():"
+            raise InvalidUsage('Error: no permission to delete', 403)
 
+        with shared_connection([dbget0, dbexe]) as [get0, exe]:
             res = exe('delete from users where id=?', user_id)
             if res.rowcount != 1:
                 return {'message': 'Error: unknown user id %d' % user_id}, 409
@@ -202,7 +204,11 @@ class Projects(Resource):
         "Add project"
         data = get_fields(
             required=['id', 'name', 'summary', 'needs', 'description'],
-            valid_extra=['url', 'img_bg', 'img1', 'img2'])
+            valid_extra=[
+                'addProfiles', 'delProfiles', 'url', 'img_bg', 'img1', 'img2'])
+
+        add_profiles(data['id'], data.pop('addProfiles', None))
+        del_profiles(data['id'], data.pop('delProfiles', None))
 
         with shared_connection([dbget0, dbexe]) as [get0, exe]:
             data['organizer'] = g.user_id
@@ -218,15 +224,29 @@ class Projects(Resource):
     @auth.login_required
     def put(self, project_id):
         "Modify project"
+        if dbcount('projects where id=?', project_id) != 1:
+            raise InvalidUsage('Error: unknown project id %d' % project_id)
+
+        # If we want only the organizer (or user 1) to be able to change the
+        # project, uncomment the following:
+        #   organizer = dbget0('id_user',
+        #       'user_organized_projects where id_project=?', project_id)[0]
+        #   if g.user_id not in [organizer, 1]:
+        #       # FIXME: this should be something like "if has_permission():"
+        #       raise InvalidUsage('Error: no permission to modify project')
+
         data = get_fields(valid_extra=[
-            'addParticipants','delParticipants',
+            'addParticipants','delParticipants', 'addProfiles', 'delProfiles',
             'id', 'name', 'summary', 'needs', 'description',
             'url', 'img_bg', 'img1', 'img2'])
 
         add_participants(project_id, data.pop('addParticipants', None))
         del_participants(project_id, data.pop('delParticipants', None))
+        add_profiles(project_id, data.pop('addProfiles', None))
+        del_profiles(project_id, data.pop('delProfiles', None))
         if not data:
             return {'message': 'ok'}
+
         cols, vals = zip(*data.items())
         qs = ','.join('%s=?' % x for x in cols)
         res = dbexe('update projects set %s where id=%d' % (qs, project_id), vals)
@@ -379,7 +399,7 @@ def add_participants(pid, uids):
         raise InvalidUsage('Error: nonexisting user in %s' % uids_str)
     if dbcount('user_joined_projects '
         'where id_project=%d and id_user in %s' % (pid, uids_str)) != 0:
-        raise InvalidUsage('Tried to add an already existing participant')
+        raise InvalidUsage('Error: tried to add an existing participant')
 
     values = ','.join('(%d, %d)' % (uid, pid) for uid in uids)
     dbexe('insert into user_joined_projects (id_user, id_project) '
@@ -398,6 +418,41 @@ def del_participants(pid, uids):
 
     dbexe('delete from user_joined_projects where '
         'id_user in %s and id_project=?' % uids_str, pid)
+
+
+def add_profiles(pid, profiles):
+    "Add profiles to a project (pid)"
+    if not profiles:
+        return
+    qs = '(%s)' % ','.join('?' * len(profiles))
+    prof_ids = dbget0('id', 'profiles where profile_name in %s' % qs, profiles)
+    prof_ids_str = '(%s)' % ','.join('%d' % x for x in prof_ids)
+
+    if len(set(prof_ids)) != len(profiles):
+        raise InvalidUsage('Error: nonexisting profile in %s' % profiles)
+    if dbcount('project_requested_profiles '
+        'where id_project=%d and id_profile in %s' % (pid, prof_ids_str)) != 0:
+        raise InvalidUsage('Error: tried to add an existing profile')
+
+    values = ','.join('(%d, %d)' % (pid, prof_id) for prof_id in prof_ids)
+    dbexe('insert into project_requested_profiles (id_project, id_profile) '
+        'values %s' % values)
+
+
+def del_profiles(pid, profiles):
+    "Remove profiles from a project (pid)"
+    if not profiles:
+        return
+    qs = '(%s)' % ','.join('?' * len(profiles))
+    prof_ids = dbget0('id', 'profiles where profile_name in %s' % qs, profiles)
+    prof_ids_str = '(%s)' % ','.join('%d' % x for x in prof_ids)
+
+    if dbcount('project_requested_profiles where id_project=%d '
+        'and id_profile in %s' % (pid, prof_ids_str)) != len(profiles):
+        raise InvalidUsage('Error: nonexisting profile in %s' % profiles)
+
+    dbexe('delete from project_requested_profiles where '
+        'id_profile in %s and id_project=?' % prof_ids_str, pid)
 
 
 def get_fields(required=None, valid_extra=None):
