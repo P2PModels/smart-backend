@@ -221,3 +221,26 @@ def test_existing_user():
             assert e.code == 400
             res = json.loads(e.file.read())
             assert res['message'].startswith('Error adding user')
+
+
+def test_missing_email_in_new_user():
+    try:
+        data = jdumps({'username': 'test_user',
+            'name': 'Random User', 'password': 'booo'})
+        post('users', data=data)
+    except urllib.error.HTTPError as e:
+        assert e.code == 400
+        res = json.loads(e.file.read())
+        assert res['message'].startswith('Must have the fields')
+
+
+def test_adding_invalid_fields_in_new_user():
+    try:
+        data = jdumps({'username': 'test_user',
+            'name': 'Random User', 'password': 'booo',
+            'email': 'test@ucm.es', 'invalid': 'should not go'})
+        post('users', data=data)
+    except urllib.error.HTTPError as e:
+        assert e.code == 400
+        res = json.loads(e.file.read())
+        assert res['message'].startswith('Can only have the fields')
