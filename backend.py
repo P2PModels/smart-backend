@@ -13,10 +13,8 @@ REST call examples:
 """
 
 # TODO:
-#   * Check for valid keys only.
 #   * Add and remove profiles to projects.
 #   * Use user permissions to see & change data.
-#   * Catch and process well all cases when request.json is empty or invalid.
 
 # We will take ideas for our api from
 # https://docs.dhis2.org/master/en/developer/html/webapi.html
@@ -72,15 +70,19 @@ auth_token = HTTPTokenAuth('Bearer')
 auth = MultiAuth(auth_basic, auth_token)
 
 @auth_basic.verify_password
-def verify_password(username, password):
-    g.username = username
-    res = dbget0('password', 'users where username=?', username)
-    return check_password_hash(res[0], password) if res else False
+def verify_password(usernameOrEmail, password):
+    res = dbget('id,password', 'users where username=? or email=?',
+        (usernameOrEmail, usernameOrEmail))
+    if len(res) == 1:
+        g.user_id = res[0]['id']
+        return check_password_hash(res[0]['password'], password)
+    else:
+        return False
 
 @auth_token.verify_token
 def verify_token(token):
     try:
-        g.username = serializer.loads(token)
+        g.user_id = serializer.loads(token)
         return True
     except:
         return False
@@ -100,24 +102,23 @@ class InvalidUsage(Exception):
 class Login(Resource):
     def post(self):
         "Return info about the user if successfully logged, None otherwise"
-        name = request.json['usernameOrEmail']
+        data = get_fields(required=['usernameOrEmail', 'password'])
+        name = data['usernameOrEmail']
         fields = 'id,username,name,password,email'
 
-        res = dbget(fields, 'users where username=?', name)
+        res = dbget(fields, 'users where username=? or email=?', (name, name))
         if len(res) == 0:
-            res = dbget(fields, 'users where email=?', name)
-            if len(res) == 0:
-                return {'message': 'Error: bad user'}, 401
+            return {'message': 'Error: bad user/password'}, 401
         r0 = res[0]
 
-        if check_password_hash(r0['password'], request.json['password']):
-            token = serializer.dumps(r0['username']).decode('utf8')
+        if check_password_hash(r0['password'], data['password']):
+            token = serializer.dumps(r0['id']).decode('utf8')
             return {'id': r0['id'],
                     'name': r0['name'],
                     'email': r0['email'],
                     'token': token}
         else:
-            return {'message': 'Error: bad password'}, 401
+            return {'message': 'Error: bad user/password'}, 401
 
 
 class Users(Resource):
@@ -130,21 +131,9 @@ class Users(Resource):
 
     def post(self):
         "Add user"
-        if not request.json:
-            raise InvalidUsage('Missing json content')
-        data = request.json.copy()
+        data = get_fields(required=['email', 'password'],
+            valid_extra=['username', 'name', 'web'])
 
-        cols_required = ['email', 'password']
-        cols_valid = cols_required + ['username', 'name', 'web']
-
-        if any(x not in data for x in cols_required):
-            return {'message': 'user_missing_required',
-                'description': 'Must have the fields %s' % cols_required}, 400
-        if not all(x in cols_valid for x in data):
-            return {'message': 'bad_entry',
-                'description': 'Can only have the fields %s' % cols_valid}, 400
-
-        data.setdefault('username', data['email'])  # username = email
         data['password'] = generate_password_hash(data['password'])
         data.setdefault('name', 'Random User')
         data['permissions'] = '---------'  # default permissions
@@ -161,8 +150,9 @@ class Users(Resource):
     @auth.login_required
     def put(self, user_id):
         "Modify user"
-        data = request.json.copy()
-        # TODO: Check that only valid keys are passed.
+        data = get_fields(
+            valid_extra=['email', 'password', 'username', 'name', 'web'])
+
         cols, vals = zip(*data.items())
         qs = ','.join('%s=?' % x for x in cols)
         res = dbexe('update users set %s where id=%d' % (qs, user_id), vals)
@@ -176,8 +166,7 @@ class Users(Resource):
         "Delete user and all references to her"
         with shared_connection([dbget0, dbexe]) as [get0, exe]:
             try:
-                uid = get0('id', 'users where username=?', g.username)[0]
-                assert user_id == uid or uid == 1
+                assert user_id == g.user_id or g.user_id == 1
                 # FIXME: last part should be something like "or has_permission()"
             except AssertionError:
                 return {'message': 'Error: no permission to delete'}, 403
@@ -208,38 +197,28 @@ class Projects(Resource):
     @auth.login_required
     def post(self):
         "Add project"
-        if not request.json:
-            raise InvalidUsage('Missing json content')
-        data = request.json.copy()
-
-        cols_required = ['id', 'name', 'summary', 'needs', 'description']
-        cols_valid = cols_required + ['url', 'img_bg', 'img1', 'img2']
-
-        if any(x not in data for x in cols_required):
-            return {'message': 'project_missing_required',
-                'description': 'Must have the fields %s' % cols_required}, 400
-        if not all(x in cols_valid for x in data):
-            return {'message': 'bad_entry',
-                'description': 'Can only have the fields %s' % cols_valid}, 400
+        data = get_fields(
+            required=['id', 'name', 'summary', 'needs', 'description'],
+            valid_extra=['url', 'img_bg', 'img1', 'img2'])
 
         with shared_connection([dbget0, dbexe]) as [get0, exe]:
-            uid = get0('id', 'users where username=?', g.username)[0]
-            data['organizer'] = uid
+            data['organizer'] = g.user_id
 
             cols, vals = zip(*data.items())
             qs = '(%s)' % ','.join('?' * len(vals))
             exe('insert into projects %r values %s' % (tuple(cols), qs), vals)
             exe('insert into user_organized_projects values (%d, %d)' %
-                (uid, data['id']))
+                (g.user_id, data['id']))
 
         return {'message': 'ok'}, 201
 
     @auth.login_required
     def put(self, project_id):
         "Modify project"
-        if not request.json:
-            raise KeyError
-        data = request.json.copy()
+        data = get_fields(valid_extra=[
+            'addParticipants','delParticipants',
+            'id', 'name', 'summary', 'needs', 'description',
+            'url', 'img_bg', 'img1', 'img2'])
 
         add_participants(project_id, data.pop('addParticipants', None))
         del_participants(project_id, data.pop('delParticipants', None))
@@ -256,12 +235,11 @@ class Projects(Resource):
     @auth.login_required
     def delete(self, project_id):
         "Delete project and all references to it"
-
         if dbcount('projects where id=?', project_id) != 1:
             return {'message': 'Error: unknown project id %d' % project_id}, 409
 
         try:
-            assert is_organizer(g.username, project_id)
+            assert is_organizer(g.user_id, project_id)
             # NOTE: add "or has_permission()"
         except AssertionError:
             return {'message': 'Error: no permission to delete'}, 403
@@ -274,14 +252,13 @@ class Info(Resource):
     @auth.login_required
     def get(self):
         "Return info about the currently logged user"
-        uid = dbget0('id', 'users where username=?', g.username)[0]
-        return get_user(uid)
+        return get_user(g.user_id)
 
 
 class Id(Resource):
     def get(self, username):
         uids = dbget0('id', 'users where username=?', username)
-        if not uids:
+        if len(uids) != 1:
             return {'message': 'Error: unknown username %r' % username}, 400
         return {'id': uids[0]}
 
@@ -321,9 +298,9 @@ def shared_connection(functions):
 
 
 def get_user(uid):
-    "Return all the fields of a given user"
+    "Return all the fields of a given user as a dict"
     with shared_connection([dbget, dbget0]) as [get, get0]:
-        users = get('id,username,name,permissions,email,web',
+        users = get('id,username,name,permissions,web',
             'users where id=?', uid)
         if len(users) == 0:
             return {'message': 'Error: unknown user id %d' % uid}, 409
@@ -365,12 +342,10 @@ def get_project(pid):
     return strip(project)
 
 
-def is_organizer(username, project_id):
+def is_organizer(user_id, project_id):
     "Return True only if user is the organizer of the given project"
-    with shared_connection([dbget0, dbcount]) as [get0, count]:
-        uid = get0('id', 'users where username=?', username)[0]
-        return count('user_organized_projects '
-            'where id_user=? and id_project=?', (uid, project_id)) == 1
+    return dbcount('user_organized_projects '
+        'where id_user=? and id_project=?', (user_id, project_id)) == 1
 
 
 def del_project(pid):
@@ -420,6 +395,23 @@ def del_participants(pid, uids):
 
     dbexe('delete from user_joined_projects where '
         'id_user in %s and id_project=?' % uids_str, pid)
+
+
+def get_fields(required=None, valid_extra=None):
+    "Return fields and raise exception if missing required or invalid present"
+    if not request.json:
+        raise InvalidUsage('Missing json content')
+
+    data = request.json.copy()
+
+    if required and any(x not in data for x in required):
+        raise InvalidUsage('Must have the fields %s' % required)
+
+    valid = (required or []) + (valid_extra or [])
+    if not all(x in valid for x in data):
+        raise InvalidUsage('Can only have the fields %s' % valid)
+
+    return data
 
 
 # App initialization.
