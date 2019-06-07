@@ -268,7 +268,7 @@ def test_change_password():
         # Change password.
         uid = get('id/test_user')['id']
         password_new = 'new_shiny_password'
-        data = jdumps({'password': password_new,})
+        data = jdumps({'password': password_new})
         put('users/%s' % uid, data=data)
 
         # Use new password to connect.
