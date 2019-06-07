@@ -13,10 +13,9 @@ REST call examples:
 """
 
 # TODO:
-#   * Finish adding ? in all possible queries, and check for valid keys only.
+#   * Check for valid keys only.
 #   * Add and remove profiles to projects.
 #   * Use user permissions to see & change data.
-#   * Sanitize sql inputs.
 #   * Catch and process well all cases when request.json is empty or invalid.
 
 # We will take ideas for our api from
@@ -152,7 +151,7 @@ class Users(Resource):
 
         cols, vals = zip(*data.items())
         try:
-            qs = '(%s)' % ','.join('?' for i in range(len(cols)))
+            qs = '(%s)' % ','.join('?' * len(vals))
             dbexe('insert into users %r values %s' % (tuple(cols), qs), vals)
         except sqlalchemy.exc.IntegrityError as e:
             raise InvalidUsage('Error adding user: %s' % e)
@@ -228,7 +227,8 @@ class Projects(Resource):
             data['organizer'] = uid
 
             cols, vals = zip(*data.items())
-            exe('insert into projects %r values %r' % (cols, vals))
+            qs = '(%s)' % ','.join('?' * len(vals))
+            exe('insert into projects %r values %s' % (tuple(cols), qs), vals)
             exe('insert into user_organized_projects values (%d, %d)' %
                 (uid, data['id']))
 
@@ -245,8 +245,9 @@ class Projects(Resource):
         del_participants(project_id, data.pop('delParticipants', None))
         if not data:
             return {'message': 'ok'}
-        kvs = ','.join('%r=%r' % k_v for k_v in data.items())
-        res = dbexe('update projects set %s where id=%d' % (kvs, project_id))
+        cols, vals = zip(*data.items())
+        qs = ','.join('%s=?' % x for x in cols)
+        res = dbexe('update projects set %s where id=%d' % (qs, project_id), vals)
         if res.rowcount == 1:
             return {'message': 'ok'}
         else:
@@ -289,18 +290,21 @@ class Id(Resource):
 # Auxiliary functions.
 
 def dbexe(command, *args, conn=None):
+    "Execute a sql command (using a given connection if given)"
     conn = conn or db.connect()
     return conn.execute(command, *args)
 
 
 def dbcount(where, *args, conn=None):
-    return dbexe('select count(*) from %s' % where, *args, conn=conn).fetchone()[0]
+    "Return the number of rows from the given table (and given conditions)"
+    res = dbexe('select count(*) from %s' % where, *args, conn=conn)
+    return res.fetchone()[0]
 
 
 def dbget(what, where, *args, conn=None):
     "Return result of the query 'select what from where' as a list of dicts"
-    res = dbexe('select %s from %s' % (what, where), *args, conn=conn).fetchall()
-    return [dict(zip(what.split(','), x)) for x in res]
+    res = dbexe('select %s from %s' % (what, where), *args, conn=conn)
+    return [dict(zip(what.split(','), x)) for x in res.fetchall()]
 
 
 def dbget0(what, where, *args, conn=None):
@@ -372,10 +376,10 @@ def is_organizer(username, project_id):
 def del_project(pid):
     "Delete a project and everywhere where it appears referenced"
     exe = db.connect().execute
-    exe('delete from projects where id=%d' % pid)
-    exe('delete from user_organized_projects where id_project=%d' % pid)
-    exe('delete from user_joined_projects where id_project=%d' % pid)
-    exe('delete from project_requested_profiles where id_project=%d' % pid)
+    exe('delete from projects where id=?', pid)
+    exe('delete from user_organized_projects where id_project=?', pid)
+    exe('delete from user_joined_projects where id_project=?', pid)
+    exe('delete from project_requested_profiles where id_project=?', pid)
 
 
 def strip(d):
@@ -415,7 +419,7 @@ def del_participants(pid, uids):
         raise InvalidUsage('Error: nonexisting user in %s' % uids_str)
 
     dbexe('delete from user_joined_projects where '
-        'id_user in %s and id_project=%d' % (uids_str, pid))
+        'id_user in %s and id_project=?' % uids_str, pid)
 
 
 # App initialization.
