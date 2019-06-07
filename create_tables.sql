@@ -26,7 +26,7 @@ create table projects (
 drop table if exists profiles;
 create table profiles (
     id integer primary key autoincrement,
-    profile_name text);
+    profile_name text not null unique);
 
 drop table if exists user_profiles;
 create table user_profiles (
