@@ -153,6 +153,9 @@ class Users(Resource):
         data = get_fields(
             valid_extra=['email', 'password', 'username', 'name', 'web'])
 
+        if 'password' in data:
+            data['password'] = generate_password_hash(data['password'])
+
         cols, vals = zip(*data.items())
         qs = ','.join('%s=?' % x for x in cols)
         res = dbexe('update users set %s where id=%d' % (qs, user_id), vals)
