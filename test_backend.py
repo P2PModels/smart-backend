@@ -48,25 +48,20 @@ def jdumps(obj):
     return json.dumps(obj).encode('utf8')
 
 
-@contextmanager
-def test_user():
-    add_test_user()
-    try:
-        yield
-    finally:
-        del_test_user()
-
-
-def add_test_user():
+def add_test_user(fields=None):
     try:
         get('id/test_user')
         raise Exception('test_user already exists.')
     except urllib.error.HTTPError as e:
         pass
 
-    data = jdumps({'username': 'test_user',
-        'name': 'Random User', 'password': 'booo', 'email': 'test@ucm.es'})
-    return post('users', data=data)
+    data = {
+        'username': 'test_user',
+        'name': 'Random User', 'password': 'booo', 'email': 'test@ucm.es'}
+    if fields:
+        data.update(fields)
+
+    return post('users', data=jdumps(data))
 
 
 def del_test_user():
@@ -74,17 +69,31 @@ def del_test_user():
     return delete('users/%s' % uid)
 
 
-def add_test_project():
+@contextmanager
+def test_user(fields=None):
+    add_test_user(fields)
     try:
-        get('projects/1000')
-        raise Exception('Project with id 1000 already exists.')
+        yield
+    finally:
+        del_test_user()
+
+
+def add_test_project(fields=None):
+    try:
+        pid = 1000 if not fields else fields.get('id', 1000)
+        get('projects/%s' % pid)
+        raise Exception('Project with id %s already exists.' % pid)
     except urllib.error.HTTPError as e:
         pass
 
-    data = jdumps({'id': 1000, 'name': 'Test project',
+    data = {
+        'id': 1000, 'name': 'Test project',
         'summary': 'This is a summary.', 'needs': 'We need nothing here.',
-        'description': 'This is an empty descritpion.'})
-    return post('projects', data=data)
+        'description': 'This is an empty descritpion.'}
+    if fields:
+        data.update(fields)
+
+    return post('projects', data=jdumps(data))
 
 
 def del_test_project():
@@ -92,8 +101,8 @@ def del_test_project():
 
 
 @contextmanager
-def test_project():
-    add_test_project()
+def test_project(fields=None):
+    add_test_project(fields)
     try:
         yield
     finally:
@@ -172,6 +181,14 @@ def test_add_del_project():
     assert res['message'] == 'ok'
 
 
+def test_add_del_project_with_profiles():
+    res = add_test_project({'addProfiles': ['musician', 'painter']})
+    assert res['message'] == 'ok'
+
+    res = del_test_project()
+    assert res['message'] == 'ok'
+
+
 def test_change_user():
     with test_user():
         uid = get('id/test_user')['id']
@@ -215,7 +232,7 @@ def test_existing_user():
         try:
             data = jdumps({
                 'username': 'test_user', 'name': 'Random User',
-                'password': 'booo', 'email': 'test@ucm.es'})
+                'password': 'booo', 'email': 'test@ucm.es'})  # duplicated user
             post('users', data=data)
         except urllib.error.HTTPError as e:
             assert e.code == 400
@@ -226,7 +243,7 @@ def test_existing_user():
 def test_missing_email_in_new_user():
     try:
         data = jdumps({'username': 'test_user',
-            'name': 'Random User', 'password': 'booo'})
+            'name': 'Random User', 'password': 'booo'})  # missing: email
         post('users', data=data)
     except urllib.error.HTTPError as e:
         assert e.code == 400
@@ -238,9 +255,42 @@ def test_adding_invalid_fields_in_new_user():
     try:
         data = jdumps({'username': 'test_user',
             'name': 'Random User', 'password': 'booo',
-            'email': 'test@ucm.es', 'invalid': 'should not go'})
+            'email': 'test@ucm.es', 'invalid': 'should not go'})  # invalid
         post('users', data=data)
     except urllib.error.HTTPError as e:
         assert e.code == 400
         res = json.loads(e.file.read())
         assert res['message'].startswith('Can only have the fields')
+
+
+def test_change_password():
+    with test_user():
+        # Change password.
+        uid = get('id/test_user')['id']
+        password_new = 'new_shiny_password'
+        data = jdumps({'password': password_new,})
+        put('users/%s' % uid, data=data)
+
+        # Use new password to connect.
+        mgr = req.HTTPPasswordMgrWithDefaultRealm()
+        mgr.add_password(None, urlbase, 'test_user', password_new)
+        opener = req.build_opener(req.HTTPBasicAuthHandler(mgr))
+        headers = {'Content-Type': 'application/json'}
+        r = req.Request(urlbase + 'projects/1', headers=headers,
+            method='PUT', data=jdumps({'name': 'Auth tested project'}))
+        res = json.loads(opener.open(r).read().decode('utf8'))
+        assert res['message'] == 'ok'
+        # If we are not authenticated, that request will raise an error.
+
+
+def test_add_del_profiles():
+    profiles = ['programmer', 'magician']
+    with test_project():
+        res = put('projects/1000', data=jdumps({'addProfiles': profiles}))
+        assert res['message'] == 'ok'
+
+        assert all(x in get('projects/1000')['requested_profiles']
+            for x in profiles)
+
+        res = put('projects/1000', data=jdumps({'delProfiles': profiles}))
+        assert res['message'] == 'ok'
