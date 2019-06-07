@@ -142,8 +142,7 @@ def test_auth_bearer():
 def test_get_users():
     res = get('users')
     assert type(res) == list
-    assert all(x in res[0] for x in
-        'id username name permissions web email'.split())
+    assert all(x in res[0] for x in 'id username name permissions web'.split())
     assert res[0]['id'] == 1
     assert res[0]['username'] == 'user1'
 
