@@ -14,7 +14,7 @@ drop table if exists projects;
 create table projects (
     id integer primary key autoincrement,
     organizer integer not null,
-    name text not null,
+    name text unique not null,
     summary text,
     description text,
     needs text,

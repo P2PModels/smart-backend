@@ -203,21 +203,24 @@ class Projects(Resource):
     def post(self):
         "Add project"
         data = get_fields(
-            required=['id', 'name', 'summary', 'needs', 'description'],
+            required=['name', 'summary', 'needs', 'description'],
             valid_extra=[
-                'addProfiles', 'delProfiles', 'url', 'img_bg', 'img1', 'img2'])
+                'addProfiles', 'delProfiles', 'url', 'img_bg', 'img1', 'img2', 'organizer'])
 
-        add_profiles(data['id'], data.pop('addProfiles', None))
-        del_profiles(data['id'], data.pop('delProfiles', None))
-
-        with shared_connection([dbget0, dbexe]) as [get0, exe]:
-            data['organizer'] = g.user_id
+        with shared_connection([dbget, dbget0, dbexe]) as [get, get0, exe]:
+            if data['organizer'] != g.user_id:
+                raise InvalidUsage('Error: organizer must be logged in user')
 
             cols, vals = zip(*data.items())
             qs = '(%s)' % ','.join('?' * len(vals))
             exe('insert into projects %r values %s' % (tuple(cols), qs), vals)
+            res = get('id', 'projects where name=?', data['name'])
+            data['id'] = res[0]['id']
             exe('insert into user_organized_projects values (%d, %d)' %
                 (g.user_id, data['id']))
+
+        add_profiles(data['id'], data.pop('addProfiles', None))
+        del_profiles(data['id'], data.pop('delProfiles', None))
 
         return {'message': 'ok'}, 201
 
