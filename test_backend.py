@@ -50,7 +50,7 @@ def jdumps(obj):
 
 def add_test_user(fields=None):
     try:
-        get('id/test_user')
+        get('id/users/test_user')
         raise Exception('test_user already exists.')
     except urllib.error.HTTPError as e:
         pass
@@ -65,7 +65,7 @@ def add_test_user(fields=None):
 
 
 def del_test_user():
-    uid = get('id/test_user')['id']
+    uid = get('id/users/test_user')['id']
     return delete('users/%s' % uid)
 
 
@@ -80,14 +80,13 @@ def test_user(fields=None):
 
 def add_test_project(fields=None):
     try:
-        pid = 1000 if not fields else fields.get('id', 1000)
-        get('projects/%s' % pid)
-        raise Exception('Project with id %s already exists.' % pid)
+        get('id/projects/test_project')
+        raise Exception('Project "test_project" already exists.')
     except urllib.error.HTTPError as e:
         pass
 
     data = {
-        'id': 1000, 'name': 'Test project',
+        'name': 'test_project',
         'summary': 'This is a summary.', 'needs': 'We need nothing here.',
         'description': 'This is an empty descritpion.'}
     if fields:
@@ -97,7 +96,8 @@ def add_test_project(fields=None):
 
 
 def del_test_project():
-    return delete('projects/1000')
+    pid =  get('id/projects/test_project')['id']
+    return delete('projects/%s' % pid)
 
 
 @contextmanager
@@ -191,7 +191,7 @@ def test_add_del_project_with_profiles():
 
 def test_change_user():
     with test_user():
-        uid = get('id/test_user')['id']
+        uid = get('id/users/test_user')['id']
         assert get('users/%s' % uid)['name'] == 'Random User'
 
         res = put('users/%s' % uid, data=jdumps({'name': 'Newman'}))
@@ -202,24 +202,28 @@ def test_change_user():
 
 def test_change_project():
     with test_project():
-        assert get('projects/1000')['name'] == 'Test project'
+        pid = get('id/projects/test_project')['id']
+        assert get('projects/%s' % pid)['name'] == 'test_project'
 
-        res = put('projects/1000', data=jdumps({'name': 'changed'}))
+        res = put('projects/%s' % pid, data=jdumps({'summary': 'changed'}))
         assert res['message'] == 'ok'
 
-        assert get('projects/1000')['name'] == 'changed'
+        assert get('projects/%s' % pid)['summary'] == 'changed'
 
 
 def test_add_del_participants():
     with test_user():
-        uid = get('id/test_user')['id']
+        uid = get('id/users/test_user')['id']
         with test_project():
-            res = put('projects/1000', data=jdumps({'addParticipants': [uid]}))
+            pid = get('id/projects/test_project')['id']
+            res = put('projects/%s' % pid,
+                data=jdumps({'addParticipants': [uid]}))
             assert res['message'] == 'ok'
 
-            assert uid in get('projects/1000')['participants']
+            assert uid in get('projects/%s' % pid)['participants']
 
-            res = put('projects/1000', data=jdumps({'delParticipants': [uid]}))
+            res = put('projects/%s' % pid,
+                data=jdumps({'delParticipants': [uid]}))
             assert res['message'] == 'ok'
 
 
@@ -266,7 +270,7 @@ def test_adding_invalid_fields_in_new_user():
 def test_change_password():
     with test_user():
         # Change password.
-        uid = get('id/test_user')['id']
+        uid = get('id/users/test_user')['id']
         password_new = 'new_shiny_password'
         data = jdumps({'password': password_new})
         put('users/%s' % uid, data=data)
@@ -286,11 +290,13 @@ def test_change_password():
 def test_add_del_profiles():
     profiles = ['programmer', 'magician']
     with test_project():
-        res = put('projects/1000', data=jdumps({'addProfiles': profiles}))
+        pid = get('id/projects/test_project')['id']
+
+        res = put('projects/%s' % pid, data=jdumps({'addProfiles': profiles}))
         assert res['message'] == 'ok'
 
-        assert all(x in get('projects/1000')['requested_profiles']
+        assert all(x in get('projects/%s' % pid)['requested_profiles']
             for x in profiles)
 
-        res = put('projects/1000', data=jdumps({'delProfiles': profiles}))
+        res = put('projects/%s' % pid, data=jdumps({'delProfiles': profiles}))
         assert res['message'] == 'ok'

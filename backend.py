@@ -145,7 +145,8 @@ class Users(Resource):
         except sqlalchemy.exc.IntegrityError as e:
             raise InvalidUsage('Error adding user: %s' % e)
 
-        return {'message': 'ok'}, 201
+        uid = dbget0('id', 'users where email=?', data['email'])
+        return {'message': 'ok', 'id': uid}, 201
 
     @auth.login_required
     def put(self, user_id):
@@ -205,24 +206,37 @@ class Projects(Resource):
         data = get_fields(
             required=['name', 'summary', 'needs', 'description'],
             valid_extra=[
-                'addProfiles', 'delProfiles', 'url', 'img_bg', 'img1', 'img2', 'organizer'])
+                'addProfiles', 'delProfiles', 'url', 'img_bg', 'img1', 'img2',
+                'organizer'])
 
-        with shared_connection([dbget, dbget0, dbexe]) as [get, get0, exe]:
-            if data['organizer'] != g.user_id:
-                raise InvalidUsage('Error: organizer must be logged in user')
+        # Remove special commands that do not correspond to the projects table.
+        profiles_to_add = data.pop('addProfiles', None)
+        profiles_to_del = data.pop('delProfiles', None)
 
+        if 'organizer' not in data:
+            data['organizer'] = g.user_id
+        elif data['organizer'] != g.user_id:
+            raise InvalidUsage('Error: organizer must be logged in user')
+
+        project_id = None  # will be filled later if it all works
+        with shared_connection([dbget0, dbexe]) as [get0, exe]:
             cols, vals = zip(*data.items())
-            qs = '(%s)' % ','.join('?' * len(vals))
-            exe('insert into projects %r values %s' % (tuple(cols), qs), vals)
-            res = get('id', 'projects where name=?', data['name'])
-            data['id'] = res[0]['id']
+            try:
+                qs = '(%s)' % ','.join('?' * len(vals))
+                exe('insert into projects %r values %s' % (tuple(cols), qs),
+                    vals)
+            except sqlalchemy.exc.IntegrityError as e:
+                raise InvalidUsage('Error adding user: %s' % e)
+
+            project_id = get0('id', 'projects where name=?', data['name'])[0]
+
             exe('insert into user_organized_projects values (%d, %d)' %
-                (g.user_id, data['id']))
+                (g.user_id, project_id))
 
-        add_profiles(data['id'], data.pop('addProfiles', None))
-        del_profiles(data['id'], data.pop('delProfiles', None))
+        add_profiles(project_id, profiles_to_add)
+        del_profiles(project_id, profiles_to_del)
 
-        return {'message': 'ok'}, 201
+        return {'message': 'ok', 'id': project_id}, 201
 
     @auth.login_required
     def put(self, project_id):
@@ -264,11 +278,8 @@ class Projects(Resource):
         if dbcount('projects where id=?', project_id) != 1:
             return {'message': 'Error: unknown project id %d' % project_id}, 409
 
-        try:
-            assert is_organizer(g.user_id, project_id)
-            # NOTE: add "or has_permission()"
-        except AssertionError:
-            return {'message': 'Error: no permission to delete'}, 403
+        if not is_organizer(g.user_id, project_id): # NOTE: or has_permission()
+            raise InvalidUsage('Error: no permission to delete', 403)
 
         del_project(project_id)
         return {'message': 'ok'}
@@ -282,11 +293,21 @@ class Info(Resource):
 
 
 class Id(Resource):
-    def get(self, username):
-        uids = dbget0('id', 'users where username=?', username)
-        if len(uids) != 1:
-            return {'message': 'Error: unknown username %r' % username}, 400
-        return {'id': uids[0]}
+    def get(self, path):
+        if not any(path.startswith(x) for x in ['users/', 'projects/']):
+            raise InvalidUsage('Error: invalid path %r' % path, 404)
+
+        name = path.split('/', 1)[-1]
+        if path.startswith('users/'):
+            uids = dbget0('id', 'users where username=?', name)
+            if len(uids) != 1:
+                return {'message': 'Error: unknown username %r' % name}, 400
+            return {'id': uids[0]}
+        elif path.startswith('projects/'):
+            pids = dbget0('id', 'projects where name=?', name)
+            if len(pids) != 1:
+                return {'message': 'Error: unknown project name %r' % name}, 400
+            return {'id': pids[0]}
 
 
 
@@ -511,7 +532,7 @@ def add_resources(api):
     add(Users, '/users', '/users/<int:user_id>')
     add(Projects, '/projects', '/projects/<int:project_id>')
     add(Info, '/info')
-    add(Id, '/id/<username>')
+    add(Id, '/id/<path:path>')
 
 
 
