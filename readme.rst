@@ -1,10 +1,46 @@
-To start playing with a local sqlite database::
+Smart Backend
+=============
+
+This program is intended to be run as a backend for `smart-projects`_. It
+exposes a REST api to consult, create and change users and projects.
+
+.. _smart-projects: https://github.com/P2PModels/smart-projects
+
+
+Initializing
+------------
+
+The default sql engine that it uses is `sqlite`_, with a local file named
+``smart.db``. It can easily be changed to any other (and should for
+scalability purposes).
+
+.. _sqlite: https://www.sqlite.org/
+
+Before running the backend the first time, you can initialize the database
+this way::
 
   sqlite3 smart.db < create_tables.sql
   sqlite3 smart.db < sample_data.sql
 
+Then you can run the backend directly with::
 
-Example tests::
+  ./backend.py
+
+which will start it in debug mode. For a more serious usage, you can run it
+for example with `gunicorn`_, as in::
+
+.. _gunicorn: https://gunicorn.org/
+
+  gunicorn backend:app
+
+which will listen locally, or use ``-b 0.0.0.0:5000`` to listen to exterior
+connections too.
+
+
+Example calls
+-------------
+
+You can use ``curl`` to test the backend with commands like::
 
   curl -H "Content-Type: application/json" -X DELETE -u user1:abc \
     -w '\nReturn code: %{http_code}\n' http://localhost:5000/users/1
@@ -25,11 +61,25 @@ it in the next calls like::
     -w '\nReturn code: %{http_code}\n' http://localhost:5000/users
 
 
+Tests
+-----
+
 You can also run a bunch of tests with::
 
   pytest-3
 
+which will run all the functions that start with ``test_`` in the file
+``test_backend.py``. You can also use the contents of that file to see
+examples of how to use the api.
 
-Ideally, I'd like this kind of queries to work here too::
+
+Future Plans
+------------
+
+Ideally, I'd like queries that look like the following to work here too::
 
   https://play.dhis2.org/2.32.0/api/users/awtnYWiVEd5.json/dataValueSets.json?dataSet=pBOMPrpg1QX&period=201401&orgUnit=DiszpKrYNg8
+
+This example comes from the `api of dhis2`_.
+
+.. `api of dhis2`: https://docs.dhis2.org/master/en/developer/html/webapi.html
