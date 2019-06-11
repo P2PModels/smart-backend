@@ -68,6 +68,50 @@ which will run all the functions that start with ``test_`` in the file
 examples of how to use the api.
 
 
+Api
+---
+
+The REST api has the following endpoints::
+
+  /users
+  /users/<id>
+  /projects
+  /projects/<id>
+  /info
+  /id/users/<username>
+  /id/projects/<name>
+  /login
+
+They all support the GET method to request information. To **create** *users*
+or *projects* use the POST method on the ``/users`` and ``/projects``
+endpoints. To **modify** their values use the PUT method. To **delete** them
+use the DELETE method.
+
+The ``/info`` endpoint returns information about the currently logged user. The
+``/id`` endpoint is useful to retrieve user and project ids from usernames and
+project names.
+
+Some of the endpoints and methods will require to be authenticated to use them.
+You can use a registered user and password with Basic Authentication or Token
+Authentication to access (you must use the ``/login`` endpoint first for that).
+
+All the requests must send the information as json (with the
+``Content-Type: application/json`` header). The replies are also json-encoded.
+
+Most calls contain the *key* (property name) ``message`` in the response. If
+the request was successful, its value will be ``ok``. If not, it will include
+the text ``Error:`` with a description of the kind of error.
+
+When creating a user or a profile an additional property ``id`` is returned,
+with the id of the created object.
+
+Finally, when using token authentication, the returned object contains the
+properties ``id``, ``name``, ``email`` and (most importantly) ``token``
+with the values referring to the successfully logged user. The value of
+``token`` must be used in subsequent calls, with the header
+``Authorization: Bearer <token>``, to stay logged as the same user.
+
+
 Future Plans
 ------------
 
