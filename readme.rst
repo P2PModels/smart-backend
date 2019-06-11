@@ -96,7 +96,7 @@ You can use a registered user and password with Basic Authentication or Token
 Authentication to access (you must use the ``/login`` endpoint first for that).
 
 All the requests must send the information as json (with the
-``Content-Type: application/json`` header). The replies are also json-encoded.
+``Content-Type: application/json`` header). The responses are also json-encoded.
 
 Most calls contain the *key* (property name) ``message`` in the response. If
 the request was successful, its value will be ``ok``. If not, it will include
