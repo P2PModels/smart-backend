@@ -1,20 +1,17 @@
 Smart Backend
 =============
 
-This program is intended to be run as a backend for `smart-projects`_. It
+This program is intended to be run as a backend for `smart-projects
+<https://github.com/P2PModels/smart-projects>`_. It
 exposes a REST api to consult, create and change users and projects.
-
-.. _smart-projects: https://github.com/P2PModels/smart-projects
 
 
 Initializing
 ------------
 
-The default sql engine that it uses is `sqlite`_, with a local file named
-``smart.db``. It can easily be changed to any other (and should for
-scalability purposes).
-
-.. _sqlite: https://www.sqlite.org/
+The default sql engine that it uses is `sqlite <https://www.sqlite.org/>`_,
+with a local file named ``smart.db``. It can easily be changed to any other
+(and should for scalability purposes).
 
 Before running the backend the first time, you can initialize the database
 this way::
@@ -27,9 +24,7 @@ Then you can run the backend directly with::
   ./backend.py
 
 which will start it in debug mode. For a more serious usage, you can run it
-for example with `gunicorn`_, as in::
-
-.. _gunicorn: https://gunicorn.org/
+for example with `gunicorn <https://gunicorn.org/>`_, as in::
 
   gunicorn backend:app
 
@@ -80,6 +75,5 @@ Ideally, I'd like queries that look like the following to work here too::
 
   https://play.dhis2.org/2.32.0/api/users/awtnYWiVEd5.json/dataValueSets.json?dataSet=pBOMPrpg1QX&period=201401&orgUnit=DiszpKrYNg8
 
-This example comes from the `api of dhis2`_.
-
-.. `api of dhis2`: https://docs.dhis2.org/master/en/developer/html/webapi.html
+This example comes from the `api of dhis2
+<https://docs.dhis2.org/master/en/developer/html/webapi.html>`_.
