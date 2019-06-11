@@ -16,9 +16,6 @@ REST call examples:
 #   * Use user permissions to see & change data.
 #   * Add logic and endpoint to recover the password and similar.
 
-# We will take ideas for our api from
-# https://docs.dhis2.org/master/en/developer/html/webapi.html
-
 # The structure that we want to follow is:
 #
 # user
